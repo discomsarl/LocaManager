@@ -1,0 +1,212 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                   Int            @id @default(autoincrement())
+  uid                  String         @unique
+  email                String         @unique
+  nom                  String
+  prenom               String?
+  phone                String?
+  role                 String         @default("PROPRIETAIRE")
+  nomEntreprise        String?        @map("nom_entreprise")
+  numeroRcs            String?        @map("numero_rcs")
+  numeroContribuable   String?        @map("numero_contribuable")
+  pays                 String?        @default("Cameroun")
+  ville                String?
+  adresse              String?
+  avatarUrl            String?        @map("avatar_url")
+  mustChangePassword   Boolean?       @default(false) @map("must_change_password")
+  isVerified           Boolean?       @default(true) @map("is_verified")
+  createdAt            DateTime?      @default(now()) @map("created_at")
+  updatedAt            DateTime?      @default(now()) @updatedAt @map("updated_at")
+
+  biens                Bien[]
+  subscriptions        Subscription[]
+  locataires           Locataire[]
+  gerantsAdjoints      GerantAdjoint[]
+  activitesGerant      ActiviteGerant[]
+
+  @@map("users")
+}
+
+model SubscriptionPlan {
+  id            String         @id
+  nom           String
+  maxBiens      Int?           @default(5) @map("max_biens")
+  maxLogements  Int?           @default(20) @map("max_logements")
+  prixMensuel   Int            @default(15000) @map("prix_mensuel")
+  prixAnnuel    Int            @default(150000) @map("prix_annuel")
+  description   String?
+
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
+}
+
+model Subscription {
+  id        Int              @id @default(autoincrement())
+  userId    Int              @map("user_id")
+  planId    String           @map("plan_id")
+  status    String           @default("ACTIVE")
+  startDate DateTime?        @default(now()) @map("start_date")
+  endDate   DateTime         @map("end_date")
+  createdAt DateTime?        @default(now()) @map("created_at")
+
+  user      User             @relation(fields: [userId], references: [id])
+  plan      SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  @@map("subscriptions")
+}
+
+model Bien {
+  id             Int        @id @default(autoincrement())
+  proprietaireId Int        @map("proprietaire_id")
+  nom            String
+  type           String     @default("immeuble")
+  adresse        String
+  ville          String
+  pays           String?    @default("Cameroun")
+  nombreEtages   Int?       @default(1) @map("nombre_etages")
+  aLogementsRdc  Boolean?   @default(true) @map("a_logements_rdc")
+  aSousSol       Boolean?   @default(false) @map("a_sous_sol")
+  nombreSousSols Int?       @default(0) @map("nombre_sous_sols")
+  description    String?
+  photo          String?
+  createdAt      DateTime?  @default(now()) @map("created_at")
+
+  proprietaire   User       @relation(fields: [proprietaireId], references: [id])
+  logements      Logement[]
+
+  @@map("biens")
+}
+
+model Logement {
+  id              Int       @id @default(autoincrement())
+  bienId          Int       @map("bien_id")
+  numero          String
+  nom             String
+  type            String    @default("appartement")
+  nombrePieces    Int?      @default(2) @map("nombre_pieces")
+  etage           Int?      @default(0)
+  superficie      Int?      @default(50)
+  loyerReference  Int       @default(100000) @map("loyer_reference")
+  chargesIncluses Int       @default(10000) @map("charges_incluses")
+  statut          String?   @default("libre")
+  description     String?
+  photo           String?
+  createdAt       DateTime? @default(now()) @map("created_at")
+
+  bien            Bien      @relation(fields: [bienId], references: [id])
+  baux            Bail[]
+
+  @@map("logements")
+}
+
+model Locataire {
+  id             Int        @id @default(autoincrement())
+  proprietaireId Int        @map("proprietaire_id")
+  nom            String
+  prenom         String?
+  telephone      String
+  email          String?
+  cni            String?
+  profession     String?
+  contactGarant  String?    @map("contact_garant")
+  createdAt      DateTime?  @default(now()) @map("created_at")
+
+  proprietaire   User       @relation(fields: [proprietaireId], references: [id])
+  baux           Bail[]
+  paiements      Paiement[]
+
+  @@map("locataires")
+}
+
+model Bail {
+  id                Int        @id @default(autoincrement())
+  locataireId       Int        @map("locataire_id")
+  logementId        Int        @map("logement_id")
+  loyerMensuel      Int        @map("loyer_mensuel")
+  chargesMensuelles Int?       @default(0) @map("charges_mensuelles")
+  depotGarantie     Int?       @default(0) @map("depot_garantie")
+  fraisDossier      Int?       @default(0) @map("frais_dossier")
+  dateDebut         String     @map("date_debut")
+  dateFin           String?    @map("date_fin")
+  statut            String?    @default("actif")
+  createdAt         DateTime?  @default(now()) @map("created_at")
+
+  locataire         Locataire  @relation(fields: [locataireId], references: [id])
+  logement          Logement   @relation(fields: [logementId], references: [id])
+  paiements         Paiement[]
+
+  @@map("baux")
+}
+
+model Paiement {
+  id           Int       @id @default(autoincrement())
+  bailId       Int       @map("bail_id")
+  locataireId  Int       @map("locataire_id")
+  montant      Int
+  moisConcerne String    @map("mois_concerne")
+  modePaiement String?   @default("especes") @map("mode_paiement")
+  statut       String?   @default("valide")
+  reference    String?
+  datePaiement String    @map("date_paiement")
+  createdAt    DateTime? @default(now()) @map("created_at")
+
+  bail         Bail      @relation(fields: [bailId], references: [id])
+  locataire    Locataire @relation(fields: [locataireId], references: [id])
+
+  @@map("paiements")
+}
+
+model GerantAdjoint {
+  id             Int              @id @default(autoincrement())
+  uid            String           @unique
+  email          String
+  name           String
+  phonenumber    String
+  password       String?
+  statutCompte   String?          @default("actif") @map("statut_compte")
+  permissions    Json?
+  proprietaireId Int              @map("proprietaire_id")
+  createdAt      DateTime?        @default(now()) @map("created_at")
+  updatedAt      DateTime?        @default(now()) @updatedAt @map("updated_at")
+
+  proprietaire   User             @relation(fields: [proprietaireId], references: [id])
+  activites      ActiviteGerant[]
+
+  @@map("gerants_adjoints")
+}
+
+model ActiviteGerant {
+  id              Int            @id @default(autoincrement())
+  gerantId        Int?           @map("gerant_id")
+  gerantUid       String?        @map("gerant_uid")
+  gerantNom       String         @map("gerant_nom")
+  bailleurId      Int            @map("bailleur_id")
+  actionType      String         @map("action_type")
+  titre           String
+  description     String
+  montantFcfa     Int?           @map("montant_fcfa")
+  quittanceNumero String?        @map("quittance_numero")
+  reference       String?
+  locataireNom    String?        @map("locataire_nom")
+  logementNom     String?        @map("logement_nom")
+  date            String
+  heure           String
+  statut          String?        @default("succes")
+  createdAt       DateTime?      @default(now()) @map("created_at")
+
+  gerant          GerantAdjoint? @relation(fields: [gerantId], references: [id])
+  bailleur        User           @relation(fields: [bailleurId], references: [id])
+
+  @@map("activites_gerant")
+}
+
