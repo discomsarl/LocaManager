@@ -221,8 +221,8 @@ export const AuthView: React.FC<AuthViewProps> = ({
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      const res = loginWithEmail(loginEmail, loginPassword);
+    setTimeout(async () => {
+      const res = await loginWithEmail(loginEmail, loginPassword);
       setIsLoading(false);
       if (res.success) {
         if (onClose) onClose();

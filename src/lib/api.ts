@@ -1,36 +1,36 @@
 // Client API pour communiquer avec le Backend Express & Prisma PostgreSQL
 
+import { auth } from './firebase';
+
 let currentAuthToken: string | null = null;
 
 export const setApiAuthToken = (token: string | null) => {
   currentAuthToken = token;
-  if (token) {
-    localStorage.setItem('discom_api_token', token);
-  } else {
-    localStorage.removeItem('discom_api_token');
-  }
 };
 
-export const getApiAuthToken = (): string => {
-  if (currentAuthToken) return currentAuthToken;
-  if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('discom_api_token');
-    if (saved) return saved;
-    const activeUserId = localStorage.getItem('locamanager_active_user_id') || 'user_bailleur_1';
-    return `dev_${activeUserId}`;
+const apiBaseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+
+export const getApiAuthToken = async (): Promise<string | null> => {
+  if (auth.currentUser) {
+    return auth.currentUser.getIdToken();
   }
-  return 'dev_user_bailleur_1';
+
+  if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_AUTH === 'true') {
+    return currentAuthToken;
+  }
+
+  return null;
 };
 
 async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = getApiAuthToken();
+  const token = await getApiAuthToken();
   const headers = new Headers(options.headers || {});
   headers.set('Content-Type', 'application/json');
   if (!headers.has('Authorization') && token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(endpoint, {
+  const response = await fetch(`${apiBaseUrl}${endpoint}`, {
     ...options,
     headers,
   });

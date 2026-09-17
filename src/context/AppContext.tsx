@@ -38,20 +38,28 @@ import {
 } from '../data/mockData';
 import { computeLeaseExpiry, generateQuittanceNumber } from '../utils/formatters';
 import { auth, googleAuthProvider } from '../lib/firebase.ts';
-import { signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
 import {
   setApiAuthToken,
   syncUserProfile,
+  getCurrentUserProfile,
   fetchBiensAndLogements,
   createBienApi,
+  updateBienApi,
+  deleteBienApi,
   createLogementApi,
   seedPropertiesApi,
   fetchLocataires,
   createLocataireApi,
+  updateLocataireApi,
+  deleteLocataireApi,
   fetchBaux,
   createBailApi,
+  updateBailApi,
+  resilierBailApi,
   fetchPaiements,
   createPaiementApi,
+  updatePaiementApi,
   fetchSubscriptionPlansApi,
   fetchGerantsApi,
   createGerantApi,
@@ -70,7 +78,7 @@ interface AppContextType {
   switchUser: (userId: string) => void;
   setUserRole: (role: UserRole) => void;
   updateUserProfile: (profileData: Partial<UserAccount>) => void;
-  loginWithEmail: (email: string, password?: string) => { success: boolean; user?: UserAccount; error?: string };
+  loginWithEmail: (email: string, password?: string) => Promise<{ success: boolean; user?: UserAccount; error?: string }>;
   loginWithPhone: (phone: string) => { success: boolean; user?: UserAccount; error?: string };
   loginWithGoogle: (email?: string, name?: string) => Promise<{ success: boolean; user?: UserAccount; error?: string }>;
   registerOwner: (data: {
@@ -300,13 +308,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const currentUser = allUsers.find(u => u.id === currentUserId) || allUsers[0];
 
   const [logements, setLogements] = useState<Logement[]>(() => {
-    const saved = getStorageItem('locamanager_logements');
-    return saved ? JSON.parse(saved) : initialLogements;
+    return [];
   });
 
   const [pieces, setPieces] = useState<Piece[]>(() => {
-    const saved = getStorageItem('locamanager_pieces');
-    return saved ? JSON.parse(saved) : initialPieces;
+    return [];
   });
 
   const [occupationHistory, setOccupationHistory] = useState<PieceOccupationHistory[]>(() => {
@@ -315,18 +321,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [locataires, setLocataires] = useState<Locataire[]>(() => {
-    const saved = getStorageItem('locamanager_locataires');
-    return saved ? JSON.parse(saved) : initialLocataires;
+    return [];
   });
 
   const [baux, setBaux] = useState<Bail[]>(() => {
-    const saved = getStorageItem('locamanager_baux');
-    return saved ? JSON.parse(saved) : initialBaux;
+    return [];
   });
 
   const [paiements, setPaiements] = useState<Paiement[]>(() => {
-    const saved = getStorageItem('locamanager_paiements');
-    return saved ? JSON.parse(saved) : initialPaiements;
+    return [];
   });
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
@@ -351,6 +354,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsRelanceModalOpen(false);
     setRelanceModalInitialData(null);
   };
+
+  const sendRelance = async (data: Omit<RelanceItem, 'id' | 'date_envoi' | 'heure_envoi' | 'statut' | 'expediteur_nom' | 'reference_dossier'> & { statut?: RelanceItem['statut']; reference_dossier?: string }) => {
+    const now = new Date();
+    const relance: RelanceItem = {
+      ...data,
+      id: `rel_${Date.now()}`,
+      date_envoi: now.toISOString().split('T')[0],
+      heure_envoi: now.toTimeString().slice(0, 5),
+      statut: data.statut || 'en_attente',
+      expediteur_nom: currentUser.name,
+      reference_dossier: data.reference_dossier || `REL-${Date.now()}`,
+    };
+    setRelances(previous => [relance, ...previous]);
+    return relance;
+  };
+
+  const sendBulkRelances = async (locatairesIds: string[], type: RelanceType, canal: RelanceCanal) => {
+    const targets = locataires.filter(locataire => locatairesIds.includes(locataire.id));
+    for (const locataire of targets) {
+      await sendRelance({
+        bailleur_id: currentUser.id,
+        locataire_id: locataire.id,
+        locataire_nom: locataire.nom_complet,
+        telephone: locataire.telephone_principal,
+        email: locataire.email,
+        type,
+        canal,
+        message: `Rappel concernant votre échéance locative.`,
+      });
+    }
+    return targets.length;
+  };
+
+  const deleteRelance = (id: string) => setRelances(previous => previous.filter(relance => relance.id !== id));
+  const clearRelancesHistory = () => setRelances([]);
 
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(() => {
     const saved = getStorageItem('locamanager_notif_settings');
@@ -400,12 +438,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     setStorageItem('locamanager_users', JSON.stringify(allUsers));
     setStorageItem('locamanager_active_user_id', currentUserId);
-    setStorageItem('locamanager_logements', JSON.stringify(logements));
-    setStorageItem('locamanager_pieces', JSON.stringify(pieces));
     setStorageItem('locamanager_history', JSON.stringify(occupationHistory));
-    setStorageItem('locamanager_locataires', JSON.stringify(locataires));
-    setStorageItem('locamanager_baux', JSON.stringify(baux));
-    setStorageItem('locamanager_paiements', JSON.stringify(paiements));
     setStorageItem('locamanager_notifications', JSON.stringify(notifications));
     setStorageItem('locamanager_notif_settings', JSON.stringify(notificationSettings));
     setStorageItem('locamanager_plans', JSON.stringify(subscriptionPlans));
@@ -413,7 +446,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setStorageItem('locamanager_tickets', JSON.stringify(maintenanceTickets));
     setStorageItem('locamanager_activites_gerant', JSON.stringify(activitesGerant));
     setStorageItem('locamanager_relances', JSON.stringify(relances));
-  }, [allUsers, currentUserId, logements, pieces, occupationHistory, locataires, baux, paiements, notifications, notificationSettings, subscriptionPlans, subscriptions, maintenanceTickets, activitesGerant, relances]);
+  }, [allUsers, currentUserId, occupationHistory, notifications, notificationSettings, subscriptionPlans, subscriptions, maintenanceTickets, activitesGerant, relances]);
 
   const addActiviteGerant = (act: Omit<ActiviteGerant, 'id' | 'date' | 'heure'>) => {
     const now = new Date();
@@ -450,7 +483,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const syncWithBackend = useCallback(async () => {
     setIsLoadingBackend(true);
     try {
-      setApiAuthToken(`dev_${currentUserId}`);
+      setApiAuthToken(null);
 
       // 1. Sync User Profile in PostgreSQL
       if (currentUser?.name) {
@@ -471,7 +504,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
-      if (currentBiens.length > 0) {
+      {
         const mappedLogements: Logement[] = currentBiens.map((b: any) => ({
           id: String(b.id),
           user_id: currentUser?.id || currentUserId,
@@ -506,7 +539,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 3. Fetch Locataires from PostgreSQL
       const dbLocataires = await fetchLocataires();
-      if (dbLocataires && dbLocataires.length > 0) {
+      {
         const mappedLoc: Locataire[] = dbLocataires.map((l: any) => ({
           id: String(l.id),
           user_id: currentUser?.id || currentUserId,
@@ -529,7 +562,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 4. Fetch Baux from PostgreSQL
       const dbBaux = await fetchBaux();
-      if (dbBaux && dbBaux.length > 0) {
+      {
         const mappedBaux: Bail[] = dbBaux.map((b: any) => {
           const startDate = b.dateDebut || '2026-01-01';
           const { theoriqueDate, reelleDate } = computeLeaseExpiry(startDate, 12, 1);
@@ -556,7 +589,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 5. Fetch Paiements from PostgreSQL
       const dbPaiements = await fetchPaiements();
-      if (dbPaiements && dbPaiements.length > 0) {
+      {
         const mappedPaiements: Paiement[] = dbPaiements.map((p: any) => ({
           id: String(p.id),
           bailleur_id: currentUser?.id || currentUserId,
@@ -675,27 +708,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const loginWithEmail = (email: string, password?: string) => {
-    const normalizedEmail = email.trim().toLowerCase();
-    const user = allUsers.find(u => u.email.toLowerCase() === normalizedEmail);
-    if (!user) {
-      return { success: false, error: 'Aucun compte associé à cette adresse email.' };
+  const loginWithEmail = async (email: string, password?: string) => {
+    if (!password) return { success: false, error: 'Le mot de passe est obligatoire.' };
+    try {
+      const result = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const profile = await getCurrentUserProfile();
+      const user = profile?.user || allUsers.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+      if (!user) return { success: false, error: 'Profil utilisateur introuvable.' };
+      setCurrentUserId(user.id || result.user.uid);
+      setIsAuthenticated(true);
+      setActiveTab(user.role === 'superadmin' ? 'superadmin' : user.role === 'locataire' ? 'locataire_portal' : 'dashboard');
+      return { success: true, user };
+    } catch (error: any) {
+      return { success: false, error: error?.message || 'Identifiants invalides.' };
     }
-    if (user.password && password && user.password !== password) {
-      return { success: false, error: 'Mot de passe incorrect. Veuillez réessayer.' };
-    }
-    setCurrentUserId(user.id);
-    setIsAuthenticated(true);
-    setStorageItem('locamanager_active_user_id', user.id);
-    setStorageItem('locamanager_is_authenticated', 'true');
-    if (user.role === 'superadmin') {
-      setActiveTab('superadmin');
-    } else if (user.role === 'locataire') {
-      setActiveTab('locataire_portal');
-    } else {
-      setActiveTab('dashboard');
-    }
-    return { success: true, user };
   };
 
   const loginWithPhone = (phone: string) => {
@@ -1275,14 +1301,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifications(prev => [newNotif, ...prev]);
 
     // Persist to PostgreSQL Prisma backend
-    createBienApi({
+      createBienApi({
       nom: newLogement.nom,
       type: newLogement.type,
       adresse: newLogement.adresse,
       ville: newLogement.ville,
       nombreEtages: newLogement.nombre_etages,
       description: newLogement.description,
-    }).catch(err => console.warn('Prisma createBien notice:', err));
+    }).then(() => syncWithBackend()).catch(err => console.warn('Prisma createBien notice:', err));
 
     return { success: true, logement: newLogement };
   };
@@ -1329,10 +1355,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateLogement = (id: string, updates: Partial<Logement>) => {
     setLogements(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
+      if (Number(id) > 0) {
+        void updateBienApi(Number(id), updates).then(() => syncWithBackend()).catch(error => {
+          console.error('Erreur modification bien dans PostgreSQL:', error);
+        });
+      }
   };
 
   const archiveLogement = (id: string) => {
     setLogements(prev => prev.map(l => l.id === id ? { ...l, is_archived: true } : l));
+      if (Number(id) > 0) {
+        void deleteBienApi(Number(id)).then(() => syncWithBackend()).catch(error => {
+          console.error('Erreur suppression bien dans PostgreSQL:', error);
+        });
+      }
   };
 
   // Pieces
@@ -1534,6 +1570,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         }
       }
+      await syncWithBackend();
     }).catch(err => console.warn('Prisma createLocataire notice:', err));
   };
 
@@ -1661,6 +1698,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateLocataire = (id: string, updates: Partial<Locataire>) => {
     setLocataires(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
+    if (Number(id) > 0) {
+      void updateLocataireApi(Number(id), updates).then(() => syncWithBackend()).catch(error => {
+        console.error('Erreur modification locataire dans PostgreSQL:', error);
+      });
+    }
   };
 
   const deleteLocataire = (id: string): { success: boolean; error?: string } => {
@@ -1691,6 +1733,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // 4. Remove locataire from list
     setLocataires(prev => prev.filter(l => l.id !== id));
+    if (Number(id) > 0) {
+      void deleteLocataireApi(Number(id)).then(() => syncWithBackend()).catch(error => {
+        console.error('Erreur suppression locataire dans PostgreSQL:', error);
+      });
+    }
 
     // 5. Add notification
     const notif: NotificationItem = {
@@ -1730,6 +1777,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       etat_lieux_sortie: etatLieux,
       solde_tout_compte: soldeCompte
     } : b));
+    if (Number(bailId) > 0) {
+      void resilierBailApi(Number(bailId)).then(() => syncWithBackend()).catch(error => {
+        console.error('Erreur résiliation bail dans PostgreSQL:', error);
+      });
+    }
 
     // 2. Update locataire to 'resilie' or 'archive'
     setLocataires(prev => prev.map(l => l.id === targetBail.locataire_id ? {
@@ -1862,6 +1914,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         date_creation: new Date().toISOString().split('T')[0]
       };
       setPaiements(prev => [newPay, ...prev]);
+    }
+
+    const targetBail = baux.find(b => b.locataire_id === paymentData.locataire_id && b.piece_id === paymentData.piece_id);
+    if (targetBail && Number(targetBail.id) > 0) {
+      const payload = {
+        bailId: Number(targetBail.id),
+        locataireId: Number(paymentData.locataire_id),
+        montant: paymentData.montant_recu,
+        moisConcerne: paymentData.mois_concerne,
+        modePaiement: paymentData.mode_paiement,
+        datePaiement: paymentData.date_paiement,
+        reference: paymentData.reference_recu || undefined,
+      };
+      const persistPayment = existingIndex >= 0 && Number(paiements[existingIndex].id) > 0
+        ? updatePaiementApi(Number(paiements[existingIndex].id), payload)
+        : createPaiementApi(payload);
+      void persistPayment.then(() => syncWithBackend()).catch(error => {
+        console.error('Erreur enregistrement paiement dans PostgreSQL:', error);
+      });
     }
 
     // If current user is Gérant Adjoint, record in activity log
@@ -2195,6 +2266,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       markNotificationAsRead,
       markAllNotificationsAsRead,
       triggerManualCronCheck,
+      relances,
+      sendRelance,
+      sendBulkRelances,
+      deleteRelance,
+      clearRelancesHistory,
+      isRelanceModalOpen,
+      setIsRelanceModalOpen,
+      relanceModalInitialData,
+      openRelanceModal,
+      closeRelanceModal,
       subscriptionPlans,
       subscriptions,
       currentUserSubscription,

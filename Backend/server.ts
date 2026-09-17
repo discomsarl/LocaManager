@@ -14,7 +14,16 @@ import verifyQuittanceRouter from './routes/verifyQuittance.ts';
 
 export async function startBackendServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT || 3000);
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', frontendUrl);
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    next();
+  });
 
   app.use(express.json());
 

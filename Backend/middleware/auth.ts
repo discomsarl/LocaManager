@@ -56,8 +56,9 @@ export const requireAuth = async (
     }
   };
 
-  // 1. Check for Development / Demo / Test tokens (e.g. user_bailleur_1, superadmin, etc.)
-  if (token.startsWith('dev_') || token.startsWith('demo_') || token.startsWith('user_')) {
+  // Development tokens are deliberately opt-in and never accepted in production.
+  const developmentAuthEnabled = process.env.NODE_ENV !== 'production' && process.env.ENABLE_DEV_AUTH === 'true';
+  if (developmentAuthEnabled && (token.startsWith('dev_') || token.startsWith('demo_') || token.startsWith('user_'))) {
     const uid = token.replace(/^(dev_|demo_)/, '');
     req.user = {
       uid,
@@ -73,39 +74,13 @@ export const requireAuth = async (
     return next();
   }
 
-  // 2. Standard Firebase ID Token verification
+  // Production and normal development requests must use a Firebase ID token.
   try {
     const decodedToken = await adminAuth.verifyIdToken(token);
     req.user = decodedToken;
     await populateDbUser(decodedToken.uid);
     return next();
   } catch (error: any) {
-    // If the token is a standard JWT from Firebase client in sandbox or preview
-    try {
-      const parts = token.split('.');
-      if (parts.length === 3) {
-        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-        const uid = payload.user_id || payload.sub || payload.uid;
-        if (uid) {
-          req.user = {
-            uid,
-            email: payload.email || 'utilisateur@discom.africa',
-            name: payload.name || payload.email?.split('@')[0],
-            auth_time: payload.auth_time || Math.floor(Date.now() / 1000),
-            sub: uid,
-            iss: payload.iss,
-            aud: payload.aud,
-            iat: payload.iat,
-            exp: payload.exp,
-          } as any;
-          await populateDbUser(uid);
-          return next();
-        }
-      }
-    } catch (jwtErr) {
-      // ignore
-    }
-
     console.warn('Firebase ID token verification failed:', error.message || error);
     return res.status(401).json({ error: 'Unauthorized: Invalid token' });
   }
