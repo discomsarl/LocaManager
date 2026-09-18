@@ -4,11 +4,16 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
+    "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "tsx server.ts",
+    "dev:client": "vite",
     "build": "npx prisma generate && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "db:validate": "prisma validate --schema=prisma/schema.prisma",
+    "db:generate": "prisma generate --schema=prisma/schema.prisma",
+    "db:studio": "prisma studio --schema=prisma/schema.prisma"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -45,6 +50,8 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
+    "concurrently": "^10.0.5",
+    "dotenv-cli": "^11.0.0",
     "drizzle-kit": "^0.31.10",
     "esbuild": "^0.25.0",
     "prisma": "^6.4.1",

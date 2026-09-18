@@ -320,11 +320,11 @@ export const AuthView: React.FC<AuthViewProps> = ({
   };
 
   // Finalize Registration upon Payment Completion
-  const finalizeRegistration = () => {
+  const finalizeRegistration = async () => {
     setIsLoading(true);
     const fullPhone = `${regPhoneCountry.dialCode} ${regPhoneNumber.trim()}`;
 
-    const res = registerOwner({
+    const res = await registerOwner({
       name: regName,
       email: regEmail,
       phonenumber: fullPhone,

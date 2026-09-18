@@ -28,6 +28,19 @@ export async function getOrCreateUser(uid: string, email: string, nom?: string, 
       });
 
       if (existingSubs.length === 0) {
+        await prisma.subscriptionPlan.upsert({
+          where: { id: 'pro' },
+          update: {},
+          create: {
+            id: 'pro',
+            nom: 'Professionnel',
+            maxBiens: 20,
+            maxLogements: 100,
+            prixMensuel: 15000,
+            prixAnnuel: 150000,
+            description: 'Forfait professionnel DISCOM',
+          },
+        });
         const inOneMonth = new Date();
         inOneMonth.setDate(inOneMonth.getDate() + 30);
         await prisma.subscription.create({

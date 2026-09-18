@@ -1,4 +1,5 @@
 import express from 'express';
+import 'dotenv/config';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 
@@ -14,7 +15,7 @@ import verifyQuittanceRouter from './routes/verifyQuittance.ts';
 
 export async function startBackendServer() {
   const app = express();
-  const PORT = Number(process.env.PORT || 3000);
+  const PORT = Number(process.env.PORT || 3001);
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
   app.use((req, res, next) => {

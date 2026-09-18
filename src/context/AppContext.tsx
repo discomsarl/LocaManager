@@ -38,7 +38,7 @@ import {
 } from '../data/mockData';
 import { computeLeaseExpiry, generateQuittanceNumber } from '../utils/formatters';
 import { auth, googleAuthProvider } from '../lib/firebase.ts';
-import { signInWithEmailAndPassword, signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
 import {
   setApiAuthToken,
   syncUserProfile,
@@ -95,7 +95,7 @@ interface AppContextType {
     montantPaye: number;
     remise?: number;
     telephonePaiement?: string;
-  }) => { success: boolean; user?: UserAccount; error?: string; subscription?: Subscription };
+  }) => Promise<{ success: boolean; user?: UserAccount; error?: string; subscription?: Subscription }>;
   addSubscriberByAdmin: (data: {
     name: string;
     email: string;
@@ -483,7 +483,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const syncWithBackend = useCallback(async () => {
     setIsLoadingBackend(true);
     try {
-      setApiAuthToken(null);
+      setApiAuthToken(
+        import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_AUTH === 'true'
+          ? `dev_${currentUserId}`
+          : null
+      );
 
       // 1. Sync User Profile in PostgreSQL
       if (currentUser?.name) {
@@ -826,7 +830,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const registerOwner = (data: {
+  const registerOwner = async (data: {
     name: string;
     email: string;
     phonenumber: string;
@@ -847,6 +851,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'Un compte propriétaire existe déjà avec cet email.' };
     }
 
+    let firebaseUser;
+    try {
+      const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, data.password);
+      firebaseUser = credential.user;
+    } catch (error: any) {
+      return { success: false, error: error?.message || 'Impossible de créer le compte Firebase.' };
+    }
+
+    const syncedProfile = await syncUserProfile(data.name.trim());
+    if (!syncedProfile?.success || !syncedProfile.user) {
+      try {
+        await firebaseSignOut(auth);
+      } catch {
+        // Keep the original synchronization error for the user.
+      }
+      return { success: false, error: 'Le compte a été créé mais son profil PostgreSQL n’a pas pu être synchronisé.' };
+    }
+
     const plan = subscriptionPlans.find(p => p.id === data.planId) || subscriptionPlans[1];
     const dureeMois = data.dureeMois || 1;
     const today = new Date();
@@ -859,7 +881,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const modeLabel = data.modePaiement || 'MTN Mobile Money Cameroun';
     const prefix = modeLabel.toUpperCase().includes('ORANGE') ? 'OM' : modeLabel.toUpperCase().includes('MTN') ? 'MOMO' : 'CB';
     const txnRef = `TXN-${prefix}-${Date.now().toString().slice(-8)}`;
-    const newUserId = `user_bailleur_${Date.now()}`;
+    const newUserId = firebaseUser.uid;
 
     const newUser: UserAccount = {
       id: newUserId,
@@ -873,7 +895,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       abonnement_id: data.planId,
       role: 'bailleur',
       created_at: todayStr,
-      password: data.password,
       emailVerified: true
     };
 
