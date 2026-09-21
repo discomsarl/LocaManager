@@ -113,7 +113,6 @@ export async function seedUserData(uid: string, userNom: string) {
     data: {
       proprietaireId: user.id,
       nom: 'Mballa',
-      prenom: 'Eric Christian',
       telephone: '+237 677 45 89 12',
       email: 'eric.mballa@gmail.com',
       cni: 'LT-10928374',
@@ -126,7 +125,6 @@ export async function seedUserData(uid: string, userNom: string) {
     data: {
       proprietaireId: user.id,
       nom: 'Eboué',
-      prenom: 'Sophie Marcelle',
       telephone: '+237 698 33 22 11',
       email: 'sophie.eboue@yahoo.fr',
       cni: 'LT-55443322',

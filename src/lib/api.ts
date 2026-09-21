@@ -1,6 +1,6 @@
 // Client API pour communiquer avec le Backend Express & Prisma PostgreSQL
 
-import { auth } from './firebase';
+import { authClient } from './auth-client';
 
 let currentAuthToken: string | null = null;
 
@@ -11,15 +11,20 @@ export const setApiAuthToken = (token: string | null) => {
 const apiBaseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
 export const getApiAuthToken = async (): Promise<string | null> => {
-  if (auth.currentUser) {
-    return auth.currentUser.getIdToken();
+  try {
+    const session = await authClient.getSession({ query: {} });
+    if (session?.data?.session?.token) {
+      return session.data.session.token;
+    }
+  } catch (err) {
+    // Better Auth session token fallback
   }
 
   if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_AUTH === 'true') {
     return currentAuthToken;
   }
 
-  return null;
+  return currentAuthToken;
 };
 
 async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -33,6 +38,7 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
   const response = await fetch(`${apiBaseUrl}${endpoint}`, {
     ...options,
     headers,
+    credentials: 'include',
   });
 
   const data = await response.json();
@@ -173,7 +179,6 @@ export async function fetchLocataires() {
 
 export async function createLocataireApi(data: {
   nom: string;
-  prenom?: string;
   telephone: string;
   email?: string;
   cni?: string;
@@ -472,5 +477,3 @@ export async function getQuittanceQrDataUrl(code: string): Promise<string | null
     return null;
   }
 }
-
-

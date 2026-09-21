@@ -32,6 +32,12 @@ export const downloadQuittancePDF = async ({
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 14;
     let y = 16;
+    const contentWidth = pageWidth - (margin * 2);
+    const drawWrappedText = (text: string, x: number, baselineY: number, maxWidth: number, lineHeight = 4) => {
+      const lines = doc.splitTextToSize(text, maxWidth);
+      doc.text(lines, x, baselineY, { lineHeightFactor: lineHeight / doc.getFontSize() });
+      return lines.length;
+    };
 
     // Header Background Accent Bar
     doc.setFillColor(30, 41, 59); // slate-800
@@ -101,11 +107,11 @@ export const downloadQuittancePDF = async ({
         const montantAttendu = paiement.montant_attendu || montantRecu;
         const soldeRestant = paiement.tranche_solde_restant ?? (montantAttendu - montantRecu);
         const trancheText = `PAIEMENT EN TRANCHE (Tranche ${paiement.tranche_numero || 1}) : Acompte versé ${formatFCFA(montantRecu)} sur ${formatFCFA(montantAttendu)}. Reste à solder : ${formatFCFA(soldeRestant)}`;
-        doc.text(trancheText, margin + 4, y + 7.5);
+        drawWrappedText(trancheText, margin + 4, y + 5, contentWidth - 8, 3.5);
       } else {
         const nbMois = paiement.nb_mois_regles || (paiement.mois_soldes ? paiement.mois_soldes.length : 1);
         const multiText = `PAIEMENT GROUPÉ : Règlement groupé de ${nbMois} mois consécutifs. Période couverte : ${paiement.mois_soldes_labels || formatMonthYear(paiement.mois_concerne)}`;
-        doc.text(multiText, margin + 4, y + 7.5);
+        drawWrappedText(multiText, margin + 4, y + 5, contentWidth - 8, 3.5);
       }
       y += 16;
     }
@@ -134,8 +140,8 @@ export const downloadQuittancePDF = async ({
     const unitsStr = pieces.length > 0 
       ? pieces.map(p => `${p.nom} (${p.type.toUpperCase()})`).join(' + ')
       : 'Logement principal';
-    doc.text(`Unité(s) : ${unitsStr.substring(0, 38)}`, margin + 4, y + 18);
-    doc.text(`Adresse : ${logement?.adresse || ''}, ${logement?.ville || 'Cameroun'}`, margin + 4, y + 24);
+    drawWrappedText(`Unité(s) : ${unitsStr}`, margin + 4, y + 18, colWidth - 8, 3.5);
+    drawWrappedText(`Adresse : ${logement?.adresse || ''}, ${logement?.ville || 'Cameroun'}`, margin + 4, y + 24, colWidth - 8, 3.5);
     doc.text(`Superficie estimée : ${pieces.reduce((sum, p) => sum + (p.superficie || 0), 0) || 50} m²`, margin + 4, y + 30);
 
     // Right Column: Tenant Details
@@ -156,9 +162,9 @@ export const downloadQuittancePDF = async ({
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(51, 65, 85);
-    doc.text(`CNI / Passeport : ${locataire?.cni_passeport || 'N/A'}`, rightColX + 4, y + 18);
-    doc.text(`Téléphone : ${locataire?.telephone_principal || 'N/A'}`, rightColX + 4, y + 24);
-    doc.text(`Profession : ${locataire?.profession || 'Cadre'}`, rightColX + 4, y + 30);
+    drawWrappedText(`CNI / Passeport : ${locataire?.cni_passeport || 'N/A'}`, rightColX + 4, y + 18, colWidth - 8, 3.5);
+    drawWrappedText(`Téléphone : ${locataire?.telephone_principal || 'N/A'}`, rightColX + 4, y + 24, colWidth - 8, 3.5);
+    drawWrappedText(`Profession : ${locataire?.profession || 'Cadre'}`, rightColX + 4, y + 30, colWidth - 8, 3.5);
 
     y += colHeight + 8;
 
@@ -179,19 +185,21 @@ export const downloadQuittancePDF = async ({
 
     // Rows
     const drawRow = (label: string, periode: string, attendu: number, encaisse: number, isAlt = false) => {
+      const labelLines = doc.splitTextToSize(label, 61);
+      const rowHeight = Math.max(7.5, labelLines.length * 3.5 + 3);
       if (isAlt) {
         doc.setFillColor(248, 250, 252);
-        doc.rect(margin, y, tableWidth, 7.5, 'F');
+        doc.rect(margin, y, tableWidth, rowHeight, 'F');
       }
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
       doc.setTextColor(15, 23, 42);
-      doc.text(label, margin + 4, y + 5);
-      doc.text(periode, margin + 70, y + 5);
-      doc.text(formatFCFA(attendu), margin + 115, y + 5, { align: 'right' });
+      doc.text(labelLines, margin + 4, y + 4.5, { lineHeightFactor: 3.5 / doc.getFontSize() });
+      doc.text(periode, margin + 70, y + 4.5);
+      doc.text(formatFCFA(attendu), margin + 115, y + 4.5, { align: 'right' });
       doc.setFont('helvetica', 'bold');
-      doc.text(formatFCFA(encaisse), margin + tableWidth - 4, y + 5, { align: 'right' });
-      y += 7.5;
+      doc.text(formatFCFA(encaisse), margin + tableWidth - 4, y + 4.5, { align: 'right' });
+      y += rowHeight;
     };
 
     const isGrouped = paiement.type_paiement === 'multi_mois';

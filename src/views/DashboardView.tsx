@@ -28,7 +28,6 @@ import {
   X,
   AlertCircle,
   CheckCircle2,
-  Database,
   RefreshCw
 } from 'lucide-react';
 import { 
@@ -70,9 +69,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     gerantsAdjoints,
     createGerantAdjoint,
     updateGerantAdjoint,
-    isBackendConnected,
-    isLoadingBackend,
-    syncWithBackend
   } = useApp();
 
   const [isCreateGerantModalOpen, setIsCreateGerantModalOpen] = useState(false);
@@ -213,22 +209,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   }, [paiements]);
 
   // Fallback data if no payments yet
-  const displayPaymentModes = paymentModesData.length > 0 ? paymentModesData : [
-    { id: 'orange_money', name: 'Orange Money (*150#)', value: 1650000, count: 8, percentage: 48, color: '#ea580c' },
-    { id: 'mtn_momo', name: 'MTN MoMo (*126#)', value: 980000, count: 5, percentage: 29, color: '#eab308' },
-    { id: 'virement', name: 'Virement Bancaire', value: 520000, count: 2, percentage: 15, color: '#2563eb' },
-    { id: 'especes', name: 'Espèces / Cash', value: 275000, count: 2, percentage: 8, color: '#10b981' }
-  ];
+  const displayPaymentModes = paymentModesData;
 
   // Revenue evolution data
-  const monthlyRevenueData = [
-    { mois: 'Oct', attendu: 2600000, encaisse: 2450000, label: 'Octobre 2025' },
-    { mois: 'Nov', attendu: 2750000, encaisse: 2700000, label: 'Novembre 2025' },
-    { mois: 'Déc', attendu: 2900000, encaisse: 2850000, label: 'Décembre 2025' },
-    { mois: 'Jan', attendu: 2900000, encaisse: 2700000, label: 'Janvier 2026' },
-    { mois: 'Fév', attendu: 3045000, encaisse: 2970000, label: 'Février 2026' },
-    { mois: 'Mar', attendu: totalAttenduMois || 3045000, encaisse: totalEncaisseMois || 2975000, label: 'Mars 2026 (En cours)' },
-  ];
+  const monthlyRevenueData = React.useMemo(() => {
+    const byMonth = new Map<string, { attendu: number; encaisse: number }>();
+    paiements.forEach((payment) => {
+      const month = payment.mois_concerne;
+      if (!month) return;
+      const current = byMonth.get(month) || { attendu: 0, encaisse: 0 };
+      current.attendu += payment.montant_attendu || payment.montant_recu;
+      if (payment.statut === 'paye' || payment.statut === 'partiel') current.encaisse += payment.montant_recu;
+      byMonth.set(month, current);
+    });
+    return [...byMonth.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(-6).map(([month, values]) => ({
+      mois: new Date(`${month}-01T00:00:00`).toLocaleDateString('fr-FR', { month: 'short' }),
+      label: new Date(`${month}-01T00:00:00`).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
+      ...values
+    }));
+  }, [paiements]);
 
   return (
     <div className="space-y-6">
@@ -248,27 +247,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </p>
         </div>
 
-        {/* Database & Actions row */}
+        {/* Actions row */}
         <div className="flex items-center gap-2.5 flex-wrap">
-          {/* PostgreSQL Prisma Live Indicator */}
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium ${
-            isBackendConnected 
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
-              : 'bg-amber-50 text-amber-800 border-amber-200'
-          }`}>
-            <span className={`w-2 h-2 rounded-full ${isBackendConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-            <Database className="w-3.5 h-3.5" />
-            <span className="font-semibold">PostgreSQL (Prisma)</span>
-            <button
-              onClick={() => syncWithBackend()}
-              disabled={isLoadingBackend}
-              title="Synchroniser avec la base de données PostgreSQL"
-              className="ml-1 p-1 hover:bg-white/60 rounded text-slate-600 hover:text-slate-900 transition-colors"
-            >
-              <RefreshCw className={`w-3 h-3 ${isLoadingBackend ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-
           {currentUser.role === 'bailleur' && (
             <>
               {gerantsAdjoints && gerantsAdjoints.length >= 1 ? (

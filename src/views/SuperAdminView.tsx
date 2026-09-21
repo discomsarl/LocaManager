@@ -81,6 +81,10 @@ export const SuperAdminView: React.FC = () => {
   const [userToDelete, setUserToDelete] = useState<UserAccount | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [actionToast, setActionToast] = useState<string | null>(null);
+  const [platformLogo, setPlatformLogo] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    return window.localStorage.getItem('locamanager_platform_logo') || '';
+  });
 
   // Receipt modal state
   const [viewingReceipt, setViewingReceipt] = useState<{ user: UserAccount; sub?: any; plan?: SubscriptionPlan } | null>(null);
@@ -290,6 +294,43 @@ export const SuperAdminView: React.FC = () => {
         </div>
       </div>
 
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
+            {platformLogo ? <img src={platformLogo} alt="Logo de la plateforme" className="w-full h-full object-contain" /> : <span className="font-black text-slate-700">LM</span>}
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-slate-800">Logo de la plateforme</h2>
+            <p className="text-xs text-slate-500">Le SuperAdmin peut remplacer l'identité visuelle affichée.</p>
+          </div>
+        </div>
+        <label className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold cursor-pointer text-center">
+          Modifier le logo
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              if (file.size > 2 * 1024 * 1024) {
+                setActionToast('Le logo doit faire au maximum 2 Mo.');
+                return;
+              }
+              const reader = new FileReader();
+              reader.onload = () => {
+                if (typeof reader.result !== 'string') return;
+                setPlatformLogo(reader.result);
+                window.localStorage.setItem('locamanager_platform_logo', reader.result);
+                setActionToast('Le logo de la plateforme a été mis à jour.');
+                setTimeout(() => setActionToast(null), 4000);
+              };
+              reader.readAsDataURL(file);
+            }}
+          />
+        </label>
+      </div>
+
       {/* Global SaaS Platform KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
@@ -297,7 +338,7 @@ export const SuperAdminView: React.FC = () => {
             MRR SaaS (Revenus d'abonnements)
           </span>
           <span className="text-xl font-extrabold text-emerald-700 block mt-1">
-            {formatFCFA(mrrSaaS || 180000)} /mois
+            {formatFCFA(mrrSaaS)} /mois
           </span>
           <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1 mt-1">
             <TrendingUp className="w-3 h-3" /> +18.4% ce trimestre

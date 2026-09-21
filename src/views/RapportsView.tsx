@@ -45,26 +45,38 @@ export const RapportsView: React.FC = () => {
     }, 0);
     const arr = mrr * 12;
 
-    const saasMonthlyData = [
-      { mois: 'Oct 2025', mrr: 210000, nouveauxBailleurs: 4, volumeLoyers: 14500000 },
-      { mois: 'Nov 2025', mrr: 280000, nouveauxBailleurs: 6, volumeLoyers: 19800000 },
-      { mois: 'Déc 2025', mrr: 350000, nouveauxBailleurs: 7, volumeLoyers: 24200000 },
-      { mois: 'Jan 2026', mrr: 455000, nouveauxBailleurs: 9, volumeLoyers: 31000000 },
-      { mois: 'Fév 2026', mrr: 560000, nouveauxBailleurs: 12, volumeLoyers: 38500000 },
-      { mois: 'Mar 2026', mrr: 685000, nouveauxBailleurs: 15, volumeLoyers: 45000000 },
-    ];
+    const saasMonthlyData = [...subscriptions.reduce((months, subscription) => {
+      const month = subscription.date_debut.slice(0, 7);
+      const current = months.get(month) || { mrr: 0, nouveauxBailleurs: 0, volumeLoyers: 0 };
+      const plan = subscriptionPlans.find(p => p.id === subscription.plan_id);
+      current.mrr += subscription.statut === 'actif' ? (plan?.prix_fcfa || 0) : 0;
+      current.nouveauxBailleurs += 1;
+      months.set(month, current);
+      return months;
+    }, new Map<string, { mrr: number; nouveauxBailleurs: number; volumeLoyers: number }>()).entries()]
+      .sort(([a], [b]) => a.localeCompare(b)).slice(-6).map(([month, values]) => ({
+        mois: new Date(`${month}-01T00:00:00`).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' }),
+        ...values,
+        volumeLoyers: paiements.filter(p => p.mois_concerne.startsWith(month)).reduce((sum, p) => sum + p.montant_recu, 0)
+      }));
 
-    const planDistribution = [
-      { name: 'Starter Bailleur (15k)', value: 18, color: '#6366f1' },
-      { name: 'Professionnel (35k)', value: 42, color: '#059669' },
-      { name: 'Entreprise & Agence (75k)', value: 12, color: '#0b1c30' },
-    ];
+    const planDistribution = subscriptionPlans.map((plan, index) => ({
+      name: plan.nom,
+      value: subscriptions.filter(subscription => subscription.plan_id === plan.id).length,
+      color: ['#6366f1', '#059669', '#0b1c30', '#ea580c'][index % 4]
+    })).filter(plan => plan.value > 0);
 
-    const geoDistribution = [
-      { ville: 'Douala (Littoral)', bailleurs: 45, volume: '28.5M FCFA' },
-      { ville: 'Yaoundé (Centre)', bailleurs: 22, volume: '14.2M FCFA' },
-      { ville: 'Kribi / Limbé (Côte)', bailleurs: 5, volume: '2.3M FCFA' },
-    ];
+    const geoDistribution = [...bailleurs.reduce((cities, bailleur) => {
+      const city = bailleur.ville || 'Non renseignée';
+      const current = cities.get(city) || { bailleurs: 0, volume: 0 };
+      current.bailleurs += 1;
+      cities.set(city, current);
+      return cities;
+    }, new Map<string, { bailleurs: number; volume: number }>()).entries()].map(([ville, values]) => ({
+      ville,
+      bailleurs: values.bailleurs,
+      volume: formatFCFA(paiements.filter(p => bailleurs.some(b => b.ville === ville && b.id === p.bailleur_id)).reduce((sum, p) => sum + p.montant_recu, 0))
+    }));
 
     const handleExportSaaSReport = () => {
       let csv = 'Mois,MRR (FCFA),Nouveaux Bailleurs,Volume Loyers Traités (FCFA)\n';
@@ -261,16 +273,22 @@ export const RapportsView: React.FC = () => {
     .reduce((sum, p) => sum + p.montant_recu, 0);
 
   const totalAttenduAnnuel = paiements.reduce((sum, p) => sum + p.montant_attendu, 0);
-  const globalRecoveryRate = totalAttenduAnnuel > 0 ? Math.round((totalEncaisseAnnuel / totalAttenduAnnuel) * 100) : 98;
+  const globalRecoveryRate = totalAttenduAnnuel > 0 ? Math.round((totalEncaisseAnnuel / totalAttenduAnnuel) * 100) : 0;
 
-  const monthlyData = [
-    { mois: 'Janvier', attendu: 2900000, encaisse: 2700000, impaye: 200000, taux: 93 },
-    { mois: 'Février', attendu: 3045000, encaisse: 2970000, impaye: 75000, taux: 97 },
-    { mois: 'Mars', attendu: 3045000, encaisse: 2975000, impaye: 70000, taux: 98 },
-    { mois: 'Avril (Proj)', attendu: 3045000, encaisse: 3045000, impaye: 0, taux: 100 },
-    { mois: 'Mai (Proj)', attendu: 3200000, encaisse: 3200000, impaye: 0, taux: 100 },
-    { mois: 'Juin (Proj)', attendu: 3200000, encaisse: 3200000, impaye: 0, taux: 100 },
-  ];
+  const monthlyData = [...paiements.reduce((months, payment) => {
+    const month = payment.mois_concerne;
+    const current = months.get(month) || { attendu: 0, encaisse: 0 };
+    current.attendu += payment.montant_attendu;
+    if (payment.statut === 'paye' || payment.statut === 'partiel') current.encaisse += payment.montant_recu;
+    months.set(month, current);
+    return months;
+  }, new Map<string, { attendu: number; encaisse: number }>()).entries()]
+    .sort(([a], [b]) => a.localeCompare(b)).slice(-6).map(([month, values]) => ({
+      mois: new Date(`${month}-01T00:00:00`).toLocaleDateString('fr-FR', { month: 'short' }),
+      ...values,
+      impaye: Math.max(0, values.attendu - values.encaisse),
+      taux: values.attendu > 0 ? Math.round((values.encaisse / values.attendu) * 100) : 0
+    }));
 
   return (
     <div className="space-y-6">

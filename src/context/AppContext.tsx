@@ -37,8 +37,7 @@ import {
   initialRelances
 } from '../data/mockData';
 import { computeLeaseExpiry, generateQuittanceNumber } from '../utils/formatters';
-import { auth, googleAuthProvider } from '../lib/firebase.ts';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
+import { authClient } from '../lib/auth-client.ts';
 import {
   setApiAuthToken,
   syncUserProfile,
@@ -300,12 +299,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     const saved = getStorageItem('locamanager_is_authenticated');
-    return saved !== null ? saved === 'true' : true;
+    return saved === 'true';
   });
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
   const currentUser = allUsers.find(u => u.id === currentUserId) || allUsers[0];
+
+  useEffect(() => {
+    let active = true;
+
+    const checkSession = async () => {
+      try {
+        const sessionRes = await authClient.getSession({ query: {} });
+        const authUser = sessionRes?.data?.user;
+
+        if (!authUser) {
+          if (!active) return;
+          setApiAuthToken(null);
+          if (!import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_AUTH !== 'true') {
+            setIsAuthenticated(false);
+            setStorageItem('locamanager_is_authenticated', 'false');
+          }
+          return;
+        }
+
+        const email = authUser.email?.toLowerCase() || '';
+        const profileResponse = await getCurrentUserProfile();
+        const profile = profileResponse?.user;
+        const localUser = allUsers.find(user => user.email.toLowerCase() === email);
+        const user = profile
+          ? {
+              ...profile,
+              id: authUser.id,
+              name: profile.name || profile.nom || authUser.name || email.split('@')[0],
+              phonenumber: profile.phonenumber || profile.phone || '',
+              role: profile.role === 'SUPER_ADMIN' ? 'superadmin' : profile.role === 'PROPRIETAIRE' ? 'bailleur' : profile.role === 'GERANT' ? 'gerant_adjoint' : profile.role === 'LOCATAIRE' ? 'locataire' : profile.role,
+            } as UserAccount
+          : localUser;
+
+        if (!active || !user) return;
+        setAllUsers(previous => {
+          const existingIndex = previous.findIndex(existing => existing.email.toLowerCase() === email);
+          if (existingIndex === -1) return [user, ...previous];
+          return previous.map((existing, index) => index === existingIndex ? { ...existing, ...user } : existing);
+        });
+        setCurrentUserId(user.id);
+        setIsAuthenticated(true);
+        setStorageItem('locamanager_active_user_id', user.id);
+        setStorageItem('locamanager_is_authenticated', 'true');
+        setActiveTab(user.role === 'superadmin' ? 'superadmin' : user.role === 'locataire' ? 'locataire_portal' : 'dashboard');
+      } catch (err) {
+        console.warn('Erreur vérification session Better Auth:', err);
+      }
+    };
+
+    checkSession();
+
+    return () => {
+      active = false;
+    };
+  }, [allUsers]);
 
   const [logements, setLogements] = useState<Logement[]>(() => {
     return [];
@@ -548,7 +602,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           id: String(l.id),
           user_id: currentUser?.id || currentUserId,
           piece_id: l.baux?.[0]?.logementId ? String(l.baux[0].logementId) : '1',
-          nom_complet: l.prenom ? `${l.nom} ${l.prenom}` : l.nom,
+          nom_complet: l.nom,
           telephone_principal: l.telephone,
           cni_passeport: l.cni || '',
           email: l.email || '',
@@ -715,11 +769,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const loginWithEmail = async (email: string, password?: string) => {
     if (!password) return { success: false, error: 'Le mot de passe est obligatoire.' };
     try {
-      const result = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const result = await authClient.signIn.email({ email: email.trim(), password });
+      if (result.error || !result.data?.user) {
+        return { success: false, error: result.error?.message || 'Identifiants invalides.' };
+      }
       const profile = await getCurrentUserProfile();
-      const user = profile?.user || allUsers.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
-      if (!user) return { success: false, error: 'Profil utilisateur introuvable.' };
-      setCurrentUserId(user.id || result.user.uid);
+      const backendUser = profile?.user;
+      const localUser = allUsers.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+      const user = backendUser
+        ? {
+            ...backendUser,
+            id: result.data.user.id,
+            name: backendUser.name || backendUser.nom || email.split('@')[0],
+            phonenumber: backendUser.phonenumber || backendUser.phone || '',
+            role: backendUser.role === 'SUPER_ADMIN' ? 'superadmin' : backendUser.role === 'PROPRIETAIRE' ? 'bailleur' : backendUser.role === 'GERANT' ? 'gerant_adjoint' : backendUser.role === 'LOCATAIRE' ? 'locataire' : backendUser.role,
+          } as UserAccount
+        : localUser;
+      if (!user) {
+        return { success: false, error: 'Profil utilisateur introuvable.' };
+      }
+      setAllUsers(previous => {
+        const existingIndex = previous.findIndex(existing => existing.email.toLowerCase() === user.email.toLowerCase());
+        if (existingIndex === -1) return [user, ...previous];
+        return previous.map((existing, index) => index === existingIndex ? { ...existing, ...user } : existing);
+      });
+      setCurrentUserId(user.id || result.data.user.id);
       setIsAuthenticated(true);
       setActiveTab(user.role === 'superadmin' ? 'superadmin' : user.role === 'locataire' ? 'locataire_portal' : 'dashboard');
       return { success: true, user };
@@ -752,78 +826,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const loginWithGoogle = async (fallbackEmail?: string, fallbackName?: string): Promise<{ success: boolean; user?: UserAccount; error?: string }> => {
+    if (import.meta.env.VITE_GOOGLE_AUTH_ENABLED !== 'true') {
+      return { success: false, error: "La connexion Google n'est pas configuree." };
+    }
+
     try {
-      let email = fallbackEmail;
-      let name = fallbackName;
-      let idToken: string | null = null;
-      let uid = `user_google_${Date.now()}`;
-
-      try {
-        const result = await signInWithPopup(auth, googleAuthProvider);
-        email = result.user.email || email;
-        name = result.user.displayName || name;
-        uid = result.user.uid;
-        idToken = await result.user.getIdToken();
-      } catch (authErr: any) {
-        console.warn('Firebase popup sign-in fallback:', authErr?.message || authErr);
-        // Fallback for sandboxed iframes or popup blockers
-        email = email || 'storetechlove@gmail.com';
-        name = name || 'Propriétaire Google DISCOM';
+      const result = await authClient.signIn.social({
+        provider: 'google',
+        callbackURL: window.location.origin,
+      });
+      if (result.error) {
+        return { success: false, error: result.error.message || 'Erreur de connexion avec Google.' };
       }
 
-      // Sync with Cloud SQL PostgreSQL backend if token is available
-      if (idToken) {
-        try {
-          const res = await fetch('/api/auth/sync', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${idToken}`,
-            },
-            body: JSON.stringify({ nom: name }),
-          });
-          const data = await res.json();
-          if (data.success && data.user) {
-            console.log('Utilisateur synchronisé avec PostgreSQL Cloud SQL:', data.user);
-          }
-        } catch (syncErr) {
-          console.error('Erreur synchronisation PostgreSQL:', syncErr);
-        }
-      }
-
-      const targetEmail = (email || 'storetechlove@gmail.com').toLowerCase();
-      let user = allUsers.find(u => u.email.toLowerCase() === targetEmail);
-      if (!user) {
-        // Auto-register as Owner/Bailleur with Google profile
-        const newUser: UserAccount = {
-          id: uid,
-          name: name || 'Propriétaire Google',
-          email: targetEmail,
-          phonenumber: '+237 699 11 22 33',
-          pays: 'Cameroun',
-          ville: 'Douala',
-          entreprise: 'Gestion Foncière DISCOM',
-          avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-          abonnement_id: 'plan_pro',
-          role: 'bailleur',
-          created_at: new Date().toISOString().split('T')[0],
-          emailVerified: true
-        };
-        setAllUsers(prev => [newUser, ...prev]);
-        user = newUser;
-      }
-      setCurrentUserId(user.id);
-      setIsAuthenticated(true);
-      setStorageItem('locamanager_active_user_id', user.id);
-      setStorageItem('locamanager_is_authenticated', 'true');
-      if (user.role === 'superadmin') {
-        setActiveTab('superadmin');
-      } else if (user.role === 'locataire') {
-        setActiveTab('locataire_portal');
-      } else {
-        setActiveTab('dashboard');
-      }
-      return { success: true, user };
+      // Better Auth redirects to Google. After its callback, checkSession creates
+      // the application profile from the authenticated Better Auth user.
+      return { success: true };
     } catch (err: any) {
       console.error('Erreur globale connexion Google:', err);
       return { success: false, error: err.message || 'Erreur de connexion' };
@@ -851,23 +869,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'Un compte propriétaire existe déjà avec cet email.' };
     }
 
-    let firebaseUser;
     try {
-      const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, data.password);
-      firebaseUser = credential.user;
+      const result = await authClient.signUp.email({
+        name: data.name.trim(),
+        email: normalizedEmail,
+        password: data.password,
+      });
+      if (result.error || !result.data?.user) {
+        return { success: false, error: result.error?.message || 'Impossible de créer le compte.' };
+      }
+
+      const newUserId = result.data.user.id;
+      const syncedProfile = await syncUserProfile(data.name.trim());
+      if (!syncedProfile?.success || !syncedProfile.user) {
+        return { success: false, error: 'Le compte a été créé mais son profil PostgreSQL n’a pas pu être synchronisé.' };
+      }
+
+      return completeOwnerRegistration(newUserId);
     } catch (error: any) {
-      return { success: false, error: error?.message || 'Impossible de créer le compte Firebase.' };
+      return { success: false, error: error?.message || 'Impossible de créer le compte.' };
     }
 
-    const syncedProfile = await syncUserProfile(data.name.trim());
-    if (!syncedProfile?.success || !syncedProfile.user) {
-      try {
-        await firebaseSignOut(auth);
-      } catch {
-        // Keep the original synchronization error for the user.
-      }
-      return { success: false, error: 'Le compte a été créé mais son profil PostgreSQL n’a pas pu être synchronisé.' };
-    }
+    function completeOwnerRegistration(newUserId: string) {
 
     const plan = subscriptionPlans.find(p => p.id === data.planId) || subscriptionPlans[1];
     const dureeMois = data.dureeMois || 1;
@@ -881,8 +904,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const modeLabel = data.modePaiement || 'MTN Mobile Money Cameroun';
     const prefix = modeLabel.toUpperCase().includes('ORANGE') ? 'OM' : modeLabel.toUpperCase().includes('MTN') ? 'MOMO' : 'CB';
     const txnRef = `TXN-${prefix}-${Date.now().toString().slice(-8)}`;
-    const newUserId = firebaseUser.uid;
-
     const newUser: UserAccount = {
       id: newUserId,
       name: data.name.trim(),
@@ -945,6 +966,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       user: newUser, 
       subscription: newSubRecord 
     };
+    }
   };
 
   const addSubscriberByAdmin = (data: {
@@ -1103,11 +1125,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const logout = () => {
-    try {
-      firebaseSignOut(auth);
-    } catch (e) {
-      console.warn('Erreur déconnexion Firebase:', e);
-    }
+    void authClient.signOut({});
+    setApiAuthToken(null);
     setIsAuthenticated(false);
     setStorageItem('locamanager_is_authenticated', 'false');
   };

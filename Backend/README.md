@@ -7,23 +7,22 @@ Tous les services et fichiers du backend sont centralisés dans le dossier `Back
 - **Base de Données** : PostgreSQL hébergé sur Google Cloud SQL (connexion directe poolée avec prise en charge Unix Socket Cloud Run)
 - **Serveur API** : Node.js avec Express 5 & TypeScript (exécution `tsx` en dev, bundle `esbuild` en prod)
 - **Sécurité & Authentification** :
-  - **Firebase Auth (Client)** : Authentification utilisateur (Connexion Google Popup, Email/Mot de passe).
-  - **Firebase Admin SDK (`config/firebase-admin.ts`)** : Vérification cryptographique des tokens JWT (Bearer Tokens) côté serveur dans le middleware `requireAuth`.
-  - **Prisma** prend le relais pour associer le `uid` Firebase aux profils, rôles (RBAC), abonnements, biens, locataires, baux et paiements dans PostgreSQL.
+  - **Better Auth** : authentification e-mail/mot de passe, sessions PostgreSQL et OAuth Google optionnel.
+  - Le middleware `requireAuth` vérifie la session Better Auth (cookie HTTP-only ou Bearer token).
+  - **Prisma** associe l'identifiant Better Auth aux profils, rôles (RBAC), abonnements, biens, locataires, baux et paiements.
 
 ## Structure des Dossiers
 
 ```
 Backend/
-├── config/
-│   └── firebase-admin.ts     # Initialisation SDK Firebase Admin (vérification des tokens JWT)
+├── auth.ts                   # Configuration Better Auth et adaptateur Prisma
 ├── db/
 │   ├── index.ts              # Client singleton PrismaClient avec gestion d'URL Cloud SQL
 │   ├── users.ts              # Opérations CRUD Prisma pour les utilisateurs et abonnements
 │   ├── properties.ts         # Opérations CRUD Prisma pour les biens et logements
 │   └── tenants.ts            # Opérations CRUD Prisma pour les locataires, baux et paiements
 ├── middleware/
-│   └── auth.ts               # Middleware requireAuth décodant les Bearer tokens Firebase
+│   └── auth.ts               # Middleware requireAuth validant les sessions Better Auth
 ├── prisma/
 │   └── schema.prisma         # Schéma déclaratif Prisma (User, Subscription, Bien, Logement, Locataire, Bail, Paiement)
 ├── routes/
@@ -42,7 +41,7 @@ Backend/
 | Ressource | Méthode | Endpoint | Description |
 |---|---|---|---|
 | **Health** | GET | `/api/health` | Statut serveur, base de données et ORM |
-| **Auth** | POST | `/api/auth/sync` | Création / synchronisation profil PostgreSQL post-login Firebase |
+| **Auth** | POST | `/api/auth/sync` | Création / synchronisation du profil PostgreSQL post-connexion |
 | **Auth** | GET | `/api/auth/me` | Profil utilisateur et abonnement actif |
 | **Auth** | PUT | `/api/auth/profile` | Mise à jour des coordonnées et infos légales (RCS, Contribuable) |
 | **Abonnements**| GET | `/api/subscription/plans` | Liste des forfaits DISCOM (Starter, Pro, Entreprise) |

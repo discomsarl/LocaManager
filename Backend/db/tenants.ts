@@ -40,7 +40,6 @@ export async function getLocataires(userUid: string) {
 
 export async function createLocataire(userUid: string, data: {
   nom: string;
-  prenom?: string;
   telephone: string;
   email?: string;
   cni?: string;
@@ -57,7 +56,6 @@ export async function createLocataire(userUid: string, data: {
       data: {
         proprietaireId: user.id,
         nom: data.nom,
-        prenom: data.prenom || '',
         telephone: data.telephone,
         email: data.email || '',
         cni: data.cni || '',
@@ -75,7 +73,6 @@ export async function createLocataire(userUid: string, data: {
 
 export async function updateLocataire(userUid: string, locataireId: number, data: {
   nom?: string;
-  prenom?: string;
   telephone?: string;
   email?: string;
   cni?: string;

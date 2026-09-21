@@ -58,7 +58,6 @@ router.get('/:code', async (req: Request, res: Response) => {
               select: {
                 id: true,
                 nom: true,
-                prenom: true,
                 email: true,
                 phone: true,
                 nomEntreprise: true,
@@ -95,7 +94,6 @@ router.get('/:code', async (req: Request, res: Response) => {
                 select: {
                   id: true,
                   nom: true,
-                  prenom: true,
                   email: true,
                   phone: true,
                   nomEntreprise: true,
@@ -133,8 +131,8 @@ router.get('/:code', async (req: Request, res: Response) => {
     const logement = bail?.logement;
     const bien = logement?.bien;
 
-    const locataireNom = locataire ? `${locataire.nom} ${locataire.prenom || ''}`.trim() : 'Locataire non renseigné';
-    const bailleurNom = bailleur ? `${bailleur.nom} ${bailleur.prenom || ''}`.trim() : 'Bailleur certifié DISCOM';
+    const locataireNom = locataire?.nom || 'Locataire non renseigné';
+    const bailleurNom = bailleur?.nom || 'Bailleur certifié DISCOM';
 
     const digitalStamp = computeQuittanceSecurityHash({
       reference: paiement.reference || `QUIT-${paiement.id}`,

@@ -12,9 +12,13 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
-      - key: FIREBASE_PROJECT_ID
+      - key: BETTER_AUTH_SECRET
         sync: false
-      - key: FIREBASE_CLIENT_EMAIL
+      - key: BETTER_AUTH_URL
         sync: false
-      - key: FIREBASE_PRIVATE_KEY
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: SUPERADMIN_EMAIL
         sync: false

@@ -6,10 +6,9 @@ import { boolean, integer, jsonb, pgTable, serial, text, timestamp } from 'drizz
 // -------------------------------------------------------------
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
-  uid: text('uid').notNull().unique(), // Firebase Auth UID
+  uid: text('uid').notNull().unique(), // Better Auth user ID
   email: text('email').notNull().unique(),
   nom: text('nom').notNull(),
-  prenom: text('prenom'),
   phone: text('phone'),
   role: text('role').notNull().default('PROPRIETAIRE'), // 'SUPER_ADMIN' | 'PROPRIETAIRE' | 'GERANT' | 'LOCATAIRE'
   nomEntreprise: text('nom_entreprise'),
@@ -92,7 +91,6 @@ export const locataires = pgTable('locataires', {
   id: serial('id').primaryKey(),
   proprietaireId: integer('proprietaire_id').references(() => users.id).notNull(),
   nom: text('nom').notNull(),
-  prenom: text('prenom'),
   telephone: text('telephone').notNull(),
   email: text('email'),
   cni: text('cni'),

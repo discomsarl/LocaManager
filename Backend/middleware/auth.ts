@@ -1,11 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
-import { adminAuth } from '../config/firebase-admin.ts';
-import { DecodedIdToken } from 'firebase-admin/auth';
+import { fromNodeHeaders } from 'better-auth/node';
+import { auth } from '../auth.ts';
 import { prisma } from '../db/index.ts';
+import { getOrCreateUser } from '../db/users.ts';
 
 export interface AuthRequest extends Request {
-  user?: DecodedIdToken;
+  user?: {
+    uid: string;
+    email: string;
+    name?: string;
+    [key: string]: any;
+  };
   dbUser?: any;
+  session?: any;
 }
 
 export const requireAuth = async (
@@ -13,28 +20,29 @@ export const requireAuth = async (
   res: Response,
   next: NextFunction
 ) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized: Missing token' });
-  }
-
-  const token = authHeader.split('Bearer ')[1].trim();
-  if (!token) {
-    return res.status(401).json({ error: 'Unauthorized: Empty token' });
-  }
-
   // Helper to attach database user record
   const populateDbUser = async (uid: string) => {
     try {
-      const user = await prisma.user.findUnique({
+      let user = await prisma.user.findUnique({
         where: { uid },
       });
+
+      // Synchronisation automatique si le compte existe dans Better Auth mais pas encore dans users
+      if (!user) {
+        const authUser = await prisma.authUser.findUnique({
+          where: { id: uid },
+        });
+        if (authUser) {
+          user = await getOrCreateUser(authUser.id, authUser.email, authUser.name);
+        }
+      }
+
       if (user) {
         req.dbUser = user;
         return;
       }
 
-      // If not found in users table, check in gerants_adjoints
+      // Si introuvable dans users, vérifier dans gerants_adjoints
       const gerant = await prisma.gerantAdjoint.findUnique({
         where: { uid },
       });
@@ -56,34 +64,47 @@ export const requireAuth = async (
     }
   };
 
-  // Development tokens are deliberately opt-in and never accepted in production.
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split('Bearer ')[1].trim() : null;
+
+  // Contournement développement opt-in (uniquement si ENABLE_DEV_AUTH est actif)
   const developmentAuthEnabled = process.env.NODE_ENV !== 'production' && process.env.ENABLE_DEV_AUTH === 'true';
-  if (developmentAuthEnabled && (token.startsWith('dev_') || token.startsWith('demo_') || token.startsWith('user_'))) {
+  if (developmentAuthEnabled && token && (token.startsWith('dev_') || token.startsWith('demo_') || token.startsWith('user_'))) {
     const uid = token.replace(/^(dev_|demo_)/, '');
     req.user = {
       uid,
       email: token.includes('@') ? token : `${uid}@discom.africa`,
+      name: `Dev User (${uid})`,
       auth_time: Math.floor(Date.now() / 1000),
       sub: uid,
-      iss: 'dev-environment',
-      aud: 'discom-saas',
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 86400 * 30,
-    } as any;
+    };
     await populateDbUser(uid);
     return next();
   }
 
-  // Production and normal development requests must use a Firebase ID token.
+  // Vérification de session Better Auth (supporte session cookie HTTP-only et Bearer token)
   try {
-    const decodedToken = await adminAuth.verifyIdToken(token);
-    req.user = decodedToken;
-    await populateDbUser(decodedToken.uid);
-    return next();
+    const session = await auth.api.getSession({
+      headers: fromNodeHeaders(req.headers),
+    });
+
+    if (session && session.user) {
+      const uid = session.user.id;
+      req.user = {
+        uid,
+        email: session.user.email,
+        name: session.user.name,
+        sub: uid,
+      };
+      req.session = session.session;
+      await populateDbUser(uid);
+      return next();
+    }
   } catch (error: any) {
-    console.warn('Firebase ID token verification failed:', error.message || error);
-    return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+    console.warn('Better Auth session verification failed:', error?.message || error);
   }
+
+  return res.status(401).json({ error: 'Unauthorized: Session invalide ou expirée' });
 };
 
 /**
@@ -136,4 +157,3 @@ export const requireGerantPermission = (permissionKey: string) => {
     return next();
   };
 };
-

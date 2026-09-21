@@ -162,8 +162,7 @@ export const LocataireLeaseModal: React.FC<LocataireLeaseModalProps> = ({
 
     if (result.success) {
       setFeedbackSuccess('Le logement a été attribué avec succès et le nouveau contrat de bail a été généré !');
-      setActiveTab('contrat');
-      setTimeout(() => setFeedbackSuccess(null), 6000);
+      onClose();
     } else {
       setFeedbackError(result.error || 'Erreur lors de l\'enregistrement.');
     }

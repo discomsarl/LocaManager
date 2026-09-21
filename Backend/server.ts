@@ -2,9 +2,11 @@ import express from 'express';
 import 'dotenv/config';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
+import { toNodeHandler } from 'better-auth/node';
+import { auth } from './auth.ts';
 
 // Routes
-import authRouter from './routes/auth.ts';
+import authRouter, { handleSyncUser, handleGetCurrentUser, handleUpdateProfile } from './routes/auth.ts';
 import propertyRouter from './routes/properties.ts';
 import subscriptionRouter from './routes/subscriptions.ts';
 import locatairesRouter from './routes/locataires.ts';
@@ -12,27 +14,34 @@ import bauxRouter from './routes/baux.ts';
 import paiementsRouter from './routes/paiements.ts';
 import gerantsRouter from './routes/gerants.ts';
 import verifyQuittanceRouter from './routes/verifyQuittance.ts';
+import { requireAuth } from './middleware/auth.ts';
 
 export async function startBackendServer() {
   const app = express();
   const PORT = Number(process.env.PORT || 3001);
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const allowedOrigins = new Set([frontendUrl, 'http://localhost:3000']);
 
+  // CORS Middleware
   app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', frontendUrl);
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    const origin = req.headers.origin;
+    if (origin && allowedOrigins.has(origin)) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Vary', 'Origin');
+      res.header('Access-Control-Allow-Credentials', 'true');
+    }
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cookie');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     if (req.method === 'OPTIONS') return res.sendStatus(204);
     next();
   });
-
-  app.use(express.json());
 
   // Health Check
   app.get('/api/health', async (req, res) => {
     res.json({
       status: 'ok',
       service: 'DISCOM SaaS Backend',
+      auth: 'Better Auth (TypeScript & PostgreSQL Session/Bearer)',
       orm: 'Prisma ORM (Next-Gen for Node.js & TypeScript)',
       database: 'PostgreSQL (Cloud SQL)',
       directory: 'Backend',
@@ -50,8 +59,20 @@ export async function startBackendServer() {
     });
   });
 
+  // Custom User Profile Endpoints (mounted before Better Auth catch-all)
+  app.post('/api/auth/sync', express.json(), requireAuth, handleSyncUser);
+  app.get('/api/auth/me', requireAuth, handleGetCurrentUser);
+  app.put('/api/auth/profile', express.json(), requireAuth, handleUpdateProfile);
+
+  // Mount Better Auth handler for all /api/auth/* routes (sign-in, sign-up, sign-out, session, etc.)
+  // Express 5 wildcard syntax: *all
+  app.all('/api/auth/*all', toNodeHandler(auth));
+
+  // Global JSON body parser for all subsequent application API routes
+  app.use(express.json());
+
   // API Routes
-  app.use('/api/auth', authRouter);
+  app.use('/api/user', authRouter);
   app.use('/api/biens', propertyRouter);
   app.use('/api/locataires', locatairesRouter);
   app.use('/api/baux', bauxRouter);

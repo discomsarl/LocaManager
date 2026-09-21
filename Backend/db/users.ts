@@ -2,7 +2,8 @@ import { prisma } from './index.ts';
 
 export async function getOrCreateUser(uid: string, email: string, nom?: string, role?: string) {
   try {
-    const userRole = role || (email.toLowerCase().includes('admin') ? 'SUPER_ADMIN' : 'PROPRIETAIRE');
+    const configuredSuperAdminEmail = process.env.SUPERADMIN_EMAIL?.trim().toLowerCase();
+    const userRole = role || (configuredSuperAdminEmail && email.toLowerCase() === configuredSuperAdminEmail ? 'SUPER_ADMIN' : 'PROPRIETAIRE');
     const userName = nom || email.split('@')[0] || 'Utilisateur';
 
     // Upsert user using Prisma
@@ -11,6 +12,7 @@ export async function getOrCreateUser(uid: string, email: string, nom?: string, 
       update: {
         email,
         ...(nom ? { nom: userName } : {}),
+        ...(configuredSuperAdminEmail && email.toLowerCase() === configuredSuperAdminEmail ? { role: 'SUPER_ADMIN' } : {}),
         updatedAt: new Date(),
       },
       create: {
@@ -97,7 +99,6 @@ export async function getUserWithDetails(uid: string) {
 
 export async function updateUserProfile(uid: string, updateData: {
   nom?: string;
-  prenom?: string;
   phone?: string;
   nomEntreprise?: string;
   numeroRcs?: string;

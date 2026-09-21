@@ -51,15 +51,14 @@ export const AuthView: React.FC<AuthViewProps> = ({
     loginWithPhone, 
     loginWithGoogle, 
     registerOwner, 
-    allUsers, 
-    switchUser,
+    allUsers,
     setIsAuthenticated,
     subscriptionPlans,
     setActiveTab
   } = useApp();
 
   // Mode: 'login' | 'register'
-  const [mode, setMode] = useState<'login' | 'register'>(initialMode);
+  const [mode] = useState<'login' | 'register'>('login');
   // Login type: 'email' | 'phone'
   const [loginType, setLoginType] = useState<'email' | 'phone'>('email');
 
@@ -232,7 +231,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
     }, 400);
   };
 
-  // Handle Google Sign-In via Firebase Auth
+  // Better Auth redirects the browser to Google and restores the session on callback.
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     setErrorMsg(null);
@@ -248,16 +247,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
       setIsLoading(false);
       setErrorMsg(err.message || 'Erreur lors de la connexion avec Google.');
     }
-  };
-
-  // Quick Demo Account Switcher
-  const handleQuickLogin = (userId: string) => {
-    setIsLoading(true);
-    setTimeout(() => {
-      switchUser(userId);
-      setIsLoading(false);
-      if (onClose) onClose();
-    }, 300);
   };
 
   // ============================================================================
@@ -413,46 +402,10 @@ export const AuthView: React.FC<AuthViewProps> = ({
             </div>
           </div>
 
-          {/* Mode Switcher Tabs (Only shown when not in middle of multi-step payment) */}
-          {regStep === 1 && (
-            <div className="mt-6 flex bg-slate-800/80 p-1 rounded-xl border border-slate-700/60">
-              <button
-                type="button"
-                id="btn-tab-connexion"
-                onClick={() => {
-                  setMode('login');
-                  setErrorMsg(null);
-                  setSuccessMsg(null);
-                }}
-                className={`flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                  mode === 'login'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-300 hover:text-white'
-                }`}
-              >
-                <KeyRound className="w-3.5 h-3.5" />
-                <span>Se Connecter</span>
-              </button>
-              <button
-                type="button"
-                id="btn-tab-inscription"
-                onClick={() => {
-                  setMode('register');
-                  setErrorMsg(null);
-                  setSuccessMsg(null);
-                  setRegStep(1);
-                }}
-                className={`flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                  mode === 'register'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-300 hover:text-white'
-                }`}
-              >
-                <Building2 className="w-3.5 h-3.5" />
-                <span>Créer un compte Propriétaire</span>
-              </button>
-            </div>
-          )}
+          <div className="mt-6 flex items-center justify-center gap-2 bg-slate-800/80 p-2 rounded-xl border border-slate-700/60 text-xs font-semibold text-white">
+            <KeyRound className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Connexion sécurisée</span>
+          </div>
 
           {/* Wizard Step Progress Tracker (When in Registration Mode) */}
           {mode === 'register' && regStep < 5 && (
@@ -543,8 +496,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 </button>
               </div>
 
-              {/* Google Sign-in Option */}
-              <button
+              {import.meta.env.VITE_GOOGLE_AUTH_ENABLED === 'true' && <button
                 type="button"
                 id="btn-google-auth"
                 onClick={handleGoogleLogin}
@@ -569,8 +521,8 @@ export const AuthView: React.FC<AuthViewProps> = ({
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                   />
                 </svg>
-                <span>Continuer avec Google (Firebase Auth)</span>
-              </button>
+                <span>Continuer avec Google</span>
+              </button>}
 
               <div className="relative flex py-1 items-center">
                 <div className="flex-grow border-t border-slate-200"></div>
@@ -705,30 +657,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 </form>
               )}
 
-              {/* Quick Demo Switcher */}
-              <div className="pt-4 border-t border-slate-100">
-                <p className="text-center text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-2">
-                  Accès Démo Rapide (Tester un Profil)
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleQuickLogin('user_bailleur_1')}
-                    className="p-2 bg-slate-50 hover:bg-indigo-50 border border-slate-200 rounded-lg text-left transition-colors cursor-pointer"
-                  >
-                    <span className="text-[10px] font-bold text-indigo-700 uppercase block">Bailleur</span>
-                    <span className="text-xs font-bold text-slate-800 block truncate">Ibrahim Fotso</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleQuickLogin('user_superadmin')}
-                    className="p-2 bg-slate-50 hover:bg-purple-50 border border-slate-200 rounded-lg text-left transition-colors cursor-pointer"
-                  >
-                    <span className="text-[10px] font-bold text-purple-700 uppercase block">SuperAdmin</span>
-                    <span className="text-xs font-bold text-slate-800 block truncate">Direction DISCOM</span>
-                  </button>
-                </div>
-              </div>
             </div>
           ) : (
             /* ================================================================= */
