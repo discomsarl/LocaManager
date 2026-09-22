@@ -66,6 +66,7 @@ import {
   deleteGerantApi,
   fetchActivitesGerantApi,
   logActiviteGerantApi,
+  updateUserProfileApi,
 } from '../lib/api.ts';
 
 interface AppContextType {
@@ -76,7 +77,7 @@ interface AppContextType {
   setIsAuthenticated: (val: boolean) => void;
   switchUser: (userId: string) => void;
   setUserRole: (role: UserRole) => void;
-  updateUserProfile: (profileData: Partial<UserAccount>) => void;
+  updateUserProfile: (profileData: Partial<UserAccount>, currentPassword: string) => Promise<{ success: boolean; error?: string }>;
   loginWithEmail: (email: string, password?: string) => Promise<{ success: boolean; user?: UserAccount; error?: string }>;
   loginWithPhone: (phone: string) => { success: boolean; user?: UserAccount; error?: string };
   loginWithGoogle: (email?: string, name?: string) => Promise<{ success: boolean; user?: UserAccount; error?: string }>;
@@ -146,7 +147,7 @@ interface AppContextType {
     logement: Omit<Logement, 'id' | 'user_id' | 'created_at'>,
     initialPiecesCount?: number,
     baseRentFCFA?: number
-  ) => { success: boolean; error?: string; logement?: Logement };
+  ) => Promise<{ success: boolean; error?: string; logement?: Logement }>;
   addMultipleLogements: (
     logementsList: Array<Omit<Logement, 'id' | 'user_id' | 'created_at'>>
   ) => { success: boolean; count: number; error?: string };
@@ -165,9 +166,9 @@ interface AppContextType {
   locataires: Locataire[];
   baux: Bail[];
   createLocataireAndBail: (
-    locataireData: Omit<Locataire, 'id' | 'user_id' | 'created_at'>,
+    locataireData: Omit<Locataire, 'id' | 'user_id' | 'created_at'> & { accountPassword: string },
     bailData: Omit<Bail, 'id' | 'locataire_id' | 'date_echeance_theorique' | 'date_echeance_reelle' | 'statut'>
-  ) => void;
+  ) => Promise<{ success: boolean; error?: string }>;
   addHousingToLocataire: (
     locataireId: string,
     logementId: string,
@@ -359,7 +360,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       active = false;
     };
-  }, [allUsers]);
+  }, []);
 
   const [logements, setLogements] = useState<Logement[]>(() => {
     return [];
@@ -1271,25 +1272,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAllUsers(prev => prev.map(u => u.id === currentUserId ? { ...u, role } : u));
   };
 
-  const updateUserProfile = (profileData: Partial<UserAccount>) => {
+  const updateUserProfile = async (profileData: Partial<UserAccount>, currentPassword: string) => {
+    try {
+      await updateUserProfileApi({
+        nom: profileData.name,
+        phone: profileData.phonenumber,
+        pays: profileData.pays,
+        ville: profileData.ville,
+        nomEntreprise: profileData.entreprise,
+        currentPassword,
+      });
+    } catch (error: any) {
+      return { success: false, error: error?.message || 'Impossible de modifier le profil.' };
+    }
     setAllUsers(prev => prev.map(u => u.id === currentUserId ? { ...u, ...profileData } : u));
+    return { success: true };
   };
 
   // Logements
-  const addLogement = (
+  const addLogement = async (
     logementData: Omit<Logement, 'id' | 'user_id' | 'created_at'>,
     initialPiecesCount = 0,
     baseRentFCFA = 100000
-  ): { success: boolean; error?: string; logement?: Logement } => {
+  ): Promise<{ success: boolean; error?: string; logement?: Logement }> => {
     // Check subscription expiration for landlords
     if (currentUser.role === 'bailleur') {
       const userSub = subscriptions.find(s => s.user_id === currentUser.id);
       const isExpired = userSub ? (userSub.statut === 'expire' || new Date(userSub.date_expiration) < new Date()) : false;
       if (isExpired) {
-        return {
+        return Promise.resolve({
           success: false,
           error: `Votre forfait DISCOM a expiré le ${userSub?.date_expiration || 'récemment'}. Veuillez renouveler votre abonnement pour pouvoir ajouter de nouveaux logements.`
-        };
+        });
       }
     }
 
@@ -1340,17 +1354,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setNotifications(prev => [newNotif, ...prev]);
 
-    // Persist to PostgreSQL Prisma backend
-      createBienApi({
-      nom: newLogement.nom,
-      type: newLogement.type,
-      adresse: newLogement.adresse,
-      ville: newLogement.ville,
-      nombreEtages: newLogement.nombre_etages,
-      description: newLogement.description,
-    }).then(() => syncWithBackend()).catch(err => console.warn('Prisma createBien notice:', err));
-
-    return { success: true, logement: newLogement };
+    try {
+      const created = await createBienApi({
+        nom: newLogement.nom,
+        type: newLogement.type,
+        adresse: newLogement.adresse,
+        ville: newLogement.ville,
+        nombreEtages: newLogement.nombre_etages,
+        description: newLogement.description,
+      });
+      const bienId = created.bien?.id;
+      if (initialPiecesCount > 0 && bienId) {
+        for (let index = 1; index <= initialPiecesCount; index += 1) {
+          await createLogementApi(bienId, {
+            numero: `Porte ${index < 10 ? `0${index}` : index}`,
+            nom: `Appartement ${index}`,
+            type: index % 2 === 0 ? '3_pieces' : '2_pieces',
+            nombrePieces: index % 2 === 0 ? 3 : 2,
+            etage: Math.ceil(index / 2),
+            superficie: 45 + (index * 5),
+            loyerReference: baseRentFCFA,
+            chargesIncluses: 10000,
+            statut: 'libre',
+          });
+        }
+      }
+      await syncWithBackend();
+      return { success: true, logement: newLogement };
+    } catch (error: any) {
+      return { success: false, error: error?.message || 'Impossible d’enregistrer le bien dans la base de données.' };
+    }
   };
 
   const addMultipleLogements = (
@@ -1458,8 +1491,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Locataires & Baux
-  const createLocataireAndBail = (
-    locataireData: Omit<Locataire, 'id' | 'user_id' | 'created_at'>,
+  const createLocataireAndBail = async (
+    locataireData: Omit<Locataire, 'id' | 'user_id' | 'created_at'> & { accountPassword: string },
     bailData: Omit<Bail, 'id' | 'locataire_id' | 'date_echeance_theorique' | 'date_echeance_reelle' | 'statut'>
   ) => {
     const locId = `loc_${Date.now()}`;
@@ -1472,20 +1505,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       bailData.mois_avance
     );
 
-    const initialArrieres = Number(locataireData.arrieres_montant) || 0;
+    const { accountPassword, ...tenantProfile } = locataireData;
+    const initialArrieres = Number(tenantProfile.arrieres_montant) || 0;
     const isAncien = Boolean(locataireData.is_ancien);
 
     const newLocataire: Locataire = {
-      ...locataireData,
+      ...tenantProfile,
       id: locId,
       user_id: currentUser.id,
       statut: 'actif',
       created_at: new Date().toISOString().split('T')[0],
       is_ancien: isAncien,
       arrieres_montant: initialArrieres,
-      arrieres_details: locataireData.arrieres_details || '',
-      date_entree_initiale: locataireData.date_entree_initiale || '',
-      mois_impayes: initialArrieres > 0 ? (locataireData.mois_impayes || 1) : 0
+      arrieres_details: tenantProfile.arrieres_details || '',
+      date_entree_initiale: tenantProfile.date_entree_initiale || '',
+      mois_impayes: initialArrieres > 0 ? (tenantProfile.mois_impayes || 1) : 0
     };
 
     const newBail: Bail = {
@@ -1588,14 +1622,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifications(prev => [newNotif, ...prev]);
 
     // Persist to PostgreSQL Prisma backend
-    createLocataireApi({
-      nom: newLocataire.nom_complet,
-      telephone: newLocataire.telephone_principal,
-      email: newLocataire.email,
-      cni: newLocataire.cni_passeport,
-      profession: newLocataire.profession,
-      contactGarant: newLocataire.contact_urgence_telephone || newLocataire.contact_urgence_nom,
-    }).then(async res => {
+    try {
+      const res = await createLocataireApi({
+        nom: newLocataire.nom_complet,
+        telephone: newLocataire.telephone_principal,
+        email: newLocataire.email,
+        cni: newLocataire.cni_passeport,
+        profession: newLocataire.profession,
+        contactGarant: newLocataire.contact_urgence_telephone || newLocataire.contact_urgence_nom,
+        password: accountPassword,
+      });
       if (res && res.locataire) {
         const numPieceId = parseInt(locataireData.piece_id, 10);
         if (!isNaN(numPieceId)) {
@@ -1611,7 +1647,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
       await syncWithBackend();
-    }).catch(err => console.warn('Prisma createLocataire notice:', err));
+      return { success: true };
+    } catch (error: any) {
+      console.warn('Prisma createLocataire notice:', error);
+      return { success: false, error: error?.message || 'Impossible d’enregistrer le locataire dans la base de données.' };
+    }
   };
 
   const addHousingToLocataire = (

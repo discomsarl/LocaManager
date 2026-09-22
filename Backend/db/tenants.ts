@@ -1,4 +1,5 @@
 import { prisma } from './index.ts';
+import { auth } from '../auth.ts';
 
 // -------------------------------------------------------------
 // LOCATAIRES (TENANTS)
@@ -45,12 +46,35 @@ export async function createLocataire(userUid: string, data: {
   cni?: string;
   profession?: string;
   contactGarant?: string;
+  password: string;
 }) {
   try {
     const user = await prisma.user.findUnique({
       where: { uid: userUid },
     });
     if (!user) throw new Error('Utilisateur propriétaire non trouvé');
+
+    if (!data.email) throw new Error('Un email est obligatoire pour créer un accès locataire.');
+    if (!data.password || data.password.length < 8 || !/[A-Z]/.test(data.password) || !/[0-9]/.test(data.password)) {
+      throw new Error('Le mot de passe doit contenir au moins 8 caractères, une majuscule et un chiffre.');
+    }
+
+    const authResult = await auth.api.signUpEmail({
+      body: { name: data.nom, email: data.email.trim().toLowerCase(), password: data.password },
+    });
+    if (!authResult.user) {
+      throw new Error('Impossible de créer l’accès du locataire.');
+    }
+
+    await prisma.user.create({
+      data: {
+        uid: authResult.user.id,
+        email: data.email.trim().toLowerCase(),
+        nom: data.nom,
+        phone: data.telephone,
+        role: 'LOCATAIRE',
+      },
+    });
 
     const newLocataire = await prisma.locataire.create({
       data: {
@@ -61,6 +85,7 @@ export async function createLocataire(userUid: string, data: {
         cni: data.cni || '',
         profession: data.profession || '',
         contactGarant: data.contactGarant || '',
+        authUid: authResult.user.id,
       },
     });
 

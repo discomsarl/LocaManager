@@ -1,36 +1,39 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
-
 model User {
-  id                   Int            @id @default(autoincrement())
-  uid                  String         @unique
-  email                String         @unique
-  nom                  String
-  phone                String?
-  role                 String         @default("PROPRIETAIRE")
-  nomEntreprise        String?        @map("nom_entreprise")
-  numeroRcs            String?        @map("numero_rcs")
-  numeroContribuable   String?        @map("numero_contribuable")
-  pays                 String?        @default("Cameroun")
-  ville                String?
-  adresse              String?
-  avatarUrl            String?        @map("avatar_url")
-  mustChangePassword   Boolean?       @default(false) @map("must_change_password")
-  isVerified           Boolean?       @default(true) @map("is_verified")
-  createdAt            DateTime?      @default(now()) @map("created_at")
-  updatedAt            DateTime?      @default(now()) @updatedAt @map("updated_at")
-
-  biens                Bien[]
-  subscriptions        Subscription[]
-  locataires           Locataire[]
-  gerantsAdjoints      GerantAdjoint[]
-  activitesGerant      ActiviteGerant[]
+  id                    Int                @id @default(autoincrement())
+  uid                   String             @unique
+  email                 String             @unique
+  nom                   String
+  phone                 String?
+  role                  String             @default("PROPRIETAIRE")
+  nomEntreprise         String?            @map("nom_entreprise")
+  numeroRcs             String?            @map("numero_rcs")
+  numeroContribuable    String?            @map("numero_contribuable")
+  pays                  String?            @default("Cameroun")
+  ville                 String?
+  adresse               String?
+  avatarUrl             String?            @map("avatar_url")
+  mustChangePassword    Boolean?           @default(false) @map("must_change_password")
+  isVerified            Boolean?           @default(true) @map("is_verified")
+  createdAt             DateTime?          @default(now()) @map("created_at")
+  updatedAt             DateTime?          @default(now()) @updatedAt @map("updated_at")
+  pendingEmail          String?            @map("pending_email")
+  pendingEmailExpiresAt DateTime?          @map("pending_email_expires_at")
+  pendingEmailToken     String?            @unique @map("pending_email_token")
+  activitesGerant       ActiviteGerant[]
+  biens                 Bien[]
+  gerantsAdjoints       GerantAdjoint[]
+  locataires            Locataire[]
+  securityAuditLogs     SecurityAuditLog[]
+  subscriptions         Subscription[]
 
   @@map("users")
 }
@@ -43,7 +46,6 @@ model SubscriptionPlan {
   prixMensuel   Int            @default(15000) @map("prix_mensuel")
   prixAnnuel    Int            @default(150000) @map("prix_annuel")
   description   String?
-
   subscriptions Subscription[]
 
   @@map("subscription_plans")
@@ -57,9 +59,8 @@ model Subscription {
   startDate DateTime?        @default(now()) @map("start_date")
   endDate   DateTime         @map("end_date")
   createdAt DateTime?        @default(now()) @map("created_at")
-
-  user      User             @relation(fields: [userId], references: [id])
   plan      SubscriptionPlan @relation(fields: [planId], references: [id])
+  user      User             @relation(fields: [userId], references: [id])
 
   @@map("subscriptions")
 }
@@ -79,7 +80,6 @@ model Bien {
   description    String?
   photo          String?
   createdAt      DateTime?  @default(now()) @map("created_at")
-
   proprietaire   User       @relation(fields: [proprietaireId], references: [id])
   logements      Logement[]
 
@@ -101,9 +101,8 @@ model Logement {
   description     String?
   photo           String?
   createdAt       DateTime? @default(now()) @map("created_at")
-
-  bien            Bien      @relation(fields: [bienId], references: [id])
   baux            Bail[]
+  bien            Bien      @relation(fields: [bienId], references: [id])
 
   @@map("logements")
 }
@@ -118,12 +117,24 @@ model Locataire {
   profession     String?
   contactGarant  String?    @map("contact_garant")
   createdAt      DateTime?  @default(now()) @map("created_at")
-
-  proprietaire   User       @relation(fields: [proprietaireId], references: [id])
+  authUid        String?    @unique @map("auth_uid")
   baux           Bail[]
+  proprietaire   User       @relation(fields: [proprietaireId], references: [id])
   paiements      Paiement[]
 
   @@map("locataires")
+}
+
+model SecurityAuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  action    String
+  ipAddress String?  @map("ip_address")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@map("security_audit_logs")
 }
 
 model Bail {
@@ -138,7 +149,6 @@ model Bail {
   dateFin           String?    @map("date_fin")
   statut            String?    @default("actif")
   createdAt         DateTime?  @default(now()) @map("created_at")
-
   locataire         Locataire  @relation(fields: [locataireId], references: [id])
   logement          Logement   @relation(fields: [logementId], references: [id])
   paiements         Paiement[]
@@ -157,7 +167,6 @@ model Paiement {
   reference    String?
   datePaiement String    @map("date_paiement")
   createdAt    DateTime? @default(now()) @map("created_at")
-
   bail         Bail      @relation(fields: [bailId], references: [id])
   locataire    Locataire @relation(fields: [locataireId], references: [id])
 
@@ -165,20 +174,19 @@ model Paiement {
 }
 
 model GerantAdjoint {
-  id             Int               @id @default(autoincrement())
-  uid            String            @unique
+  id             Int              @id @default(autoincrement())
+  uid            String           @unique
   email          String
   name           String
   phonenumber    String
   password       String?
-  statutCompte   String?           @default("actif") @map("statut_compte")
+  statutCompte   String?          @default("actif") @map("statut_compte")
   permissions    Json?
-  proprietaireId Int               @map("proprietaire_id")
-  createdAt      DateTime?         @default(now()) @map("created_at")
-  updatedAt      DateTime?         @default(now()) @updatedAt @map("updated_at")
-
-  proprietaire   User              @relation(fields: [proprietaireId], references: [id])
+  proprietaireId Int              @map("proprietaire_id")
+  createdAt      DateTime?        @default(now()) @map("created_at")
+  updatedAt      DateTime?        @default(now()) @updatedAt @map("updated_at")
   activites      ActiviteGerant[]
+  proprietaire   User             @relation(fields: [proprietaireId], references: [id])
 
   @@map("gerants_adjoints")
 }
@@ -201,16 +209,12 @@ model ActiviteGerant {
   heure           String
   statut          String?        @default("succes")
   createdAt       DateTime?      @default(now()) @map("created_at")
-
-  gerant          GerantAdjoint? @relation(fields: [gerantId], references: [id])
   bailleur        User           @relation(fields: [bailleurId], references: [id])
+  gerant          GerantAdjoint? @relation(fields: [gerantId], references: [id])
 
   @@map("activites_gerant")
 }
 
-// -------------------------------------------------------------
-// BETTER AUTH CORE MODELS
-// -------------------------------------------------------------
 model AuthUser {
   id            String    @id
   name          String
@@ -219,9 +223,8 @@ model AuthUser {
   image         String?
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
-
-  sessions      Session[]
   accounts      Account[]
+  sessions      Session[]
 
   @@map("auth_users")
 }
@@ -245,7 +248,6 @@ model Account {
   accountId             String    @map("account_id")
   providerId            String    @map("provider_id")
   userId                String    @map("user_id")
-  user                  AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessToken           String?   @map("access_token")
   refreshToken          String?   @map("refresh_token")
   idToken               String?   @map("id_token")
@@ -255,6 +257,7 @@ model Account {
   password              String?
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at")
+  user                  AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("account")
 }

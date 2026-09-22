@@ -557,7 +557,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                       </label>
                       <button 
                         type="button"
-                        onClick={() => alert("Pour réinitialiser votre mot de passe, un lien sera envoyé à votre adresse email.")}
+                        onClick={() => window.location.assign('/forgot-password')}
                         className="text-[11px] text-indigo-600 hover:underline cursor-pointer"
                       >
                         Mot de passe oublié ?

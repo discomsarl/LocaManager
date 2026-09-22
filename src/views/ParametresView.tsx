@@ -19,6 +19,7 @@ import {
   X
 } from 'lucide-react';
 import { formatFCFA } from '../utils/formatters';
+import { changePasswordApi, requestEmailChangeApi } from '../lib/api';
 
 export const ParametresView: React.FC = () => {
   const { 
@@ -42,22 +43,60 @@ export const ParametresView: React.FC = () => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [newEmail, setNewEmail] = useState(currentUser.email);
+  const [securityMessage, setSecurityMessage] = useState<string | null>(null);
+  const [securityError, setSecurityError] = useState<string | null>(null);
 
   const currentPlan = subscriptionPlans.find(p => p.id === currentUser.abonnement_id) || subscriptionPlans[1];
   const userSub = subscriptions.find(s => s.user_id === currentUser.id && s.statut === 'actif');
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateUserProfile({
+    const result = await updateUserProfile({
       name,
-      email,
       phonenumber,
       pays,
       ville,
       entreprise
-    });
+    }, currentPassword);
+    if (!result.success) {
+      setSecurityError(result.error || 'Mot de passe actuel incorrect.');
+      return;
+    }
+    setCurrentPassword('');
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSecurityError(null);
+    setSecurityMessage(null);
+    try {
+      await changePasswordApi({ currentPassword, newPassword, confirmPassword });
+      setSecurityMessage('Votre mot de passe a été modifié. Les autres sessions ont été déconnectées.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error: any) {
+      setSecurityError(error?.message || 'Impossible de modifier le mot de passe.');
+    }
+  };
+
+  const handleRequestEmailChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSecurityError(null);
+    setSecurityMessage(null);
+    try {
+      const result = await requestEmailChangeApi({ currentPassword, newEmail });
+      setSecurityMessage(result.message);
+      setCurrentPassword('');
+    } catch (error: any) {
+      setSecurityError(error?.message || 'Impossible de demander le changement d’e-mail.');
+    }
   };
 
   return (
@@ -128,7 +167,7 @@ export const ParametresView: React.FC = () => {
               <input 
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                readOnly
                 className="w-full px-3.5 py-2.5 bg-[#f8f9ff] border border-[#c6c6cd] rounded-xl text-[13px] text-[#0b1c30] focus:outline-none focus:border-[#0b1c30]"
                 required
               />
@@ -178,6 +217,30 @@ export const ParametresView: React.FC = () => {
               Enregistrer les modifications
             </button>
           </div>
+        </form>
+      </div>
+
+      <div className="bg-white rounded-2xl p-6 border border-[#c6c6cd]/50 shadow-xs space-y-6">
+        <div>
+          <h3 className="font-bold text-[18px] text-[#0b1c30]">Sécurité du compte</h3>
+          <p className="text-[12px] text-slate-500 mt-1">Votre mot de passe actuel est toujours demandé avant une modification sensible.</p>
+        </div>
+        {securityMessage && <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs">{securityMessage}</div>}
+        {securityError && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs">{securityError}</div>}
+
+        <form onSubmit={handleChangePassword} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Mot de passe actuel" required className="px-3 py-2.5 border border-slate-300 rounded-xl text-xs" />
+          <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Nouveau mot de passe" required minLength={8} className="px-3 py-2.5 border border-slate-300 rounded-xl text-xs" />
+          <div className="flex gap-2">
+            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirmation" required minLength={8} className="min-w-0 flex-1 px-3 py-2.5 border border-slate-300 rounded-xl text-xs" />
+            <button type="submit" className="px-3 py-2 bg-[#0b1c30] text-white rounded-xl text-xs font-bold">Modifier</button>
+          </div>
+        </form>
+
+        <form onSubmit={handleRequestEmailChange} className="flex flex-col sm:flex-row gap-3 border-t border-slate-200 pt-5">
+          <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Nouvelle adresse e-mail" required className="flex-1 px-3 py-2.5 border border-slate-300 rounded-xl text-xs" />
+          <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Mot de passe actuel" required className="px-3 py-2.5 border border-slate-300 rounded-xl text-xs" />
+          <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold">Demander le changement</button>
         </form>
       </div>
 

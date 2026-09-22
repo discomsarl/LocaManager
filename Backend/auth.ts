@@ -1,7 +1,11 @@
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer } from 'better-auth/plugins';
+import { Resend } from 'resend';
 import { prisma } from './db/index.ts';
+
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const resendFrom = process.env.RESEND_FROM_EMAIL || 'LocaManager <onboarding@resend.dev>';
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -28,6 +32,29 @@ export const auth = betterAuth({
     minPasswordLength: 6,
     requireEmailVerification: false,
     autoSignIn: true,
+    revokeSessionsOnPasswordReset: true,
+    resetPasswordTokenExpiresIn: 60 * 60,
+    sendResetPassword: async ({ user, url }) => {
+      if (!resend) {
+        console.error('RESEND_API_KEY est absente : e-mail de réinitialisation non envoyé.');
+        return;
+      }
+
+      const { error } = await resend.emails.send({
+        from: resendFrom,
+        to: [user.email],
+        subject: 'Réinitialisez votre mot de passe LocaManager',
+        html: `
+          <div style="font-family:Arial,sans-serif;color:#1e293b;line-height:1.5">
+            <h1 style="font-size:20px">Réinitialisation de votre mot de passe</h1>
+            <p>Bonjour,</p>
+            <p>Une demande de réinitialisation a été reçue pour votre compte LocaManager.</p>
+            <p><a href="${url}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none">Choisir un nouveau mot de passe</a></p>
+            <p>Ce lien expire dans une heure. Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet e-mail.</p>
+          </div>`,
+      });
+      if (error) throw error;
+    },
   },
   socialProviders: {
     google: {

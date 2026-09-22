@@ -72,6 +72,34 @@ export async function getCurrentUserProfile() {
   }
 }
 
+export async function changePasswordApi(data: { currentPassword: string; newPassword: string; confirmPassword: string }) {
+  return apiFetch<{ success: boolean }>('/api/user/security/password', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function requestEmailChangeApi(data: { currentPassword: string; newEmail: string }) {
+  return apiFetch<{ success: boolean; message: string }>('/api/user/security/email', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateUserProfileApi(data: Record<string, unknown>) {
+  return apiFetch<{ success: boolean; user: any }>('/api/auth/profile', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function confirmEmailChangeApi(token: string) {
+  return apiFetch<{ success: boolean }>('/api/user/security/email/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+}
+
 // -------------------------------------------------------------
 // BIENS & LOGEMENTS (PROPERTIES)
 // -------------------------------------------------------------
@@ -184,6 +212,7 @@ export async function createLocataireApi(data: {
   cni?: string;
   profession?: string;
   contactGarant?: string;
+  password: string;
 }) {
   return await apiFetch<{ success: boolean; locataire: any }>('/api/locataires', {
     method: 'POST',

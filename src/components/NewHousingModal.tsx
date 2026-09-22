@@ -161,7 +161,7 @@ export const NewHousingModal: React.FC<NewHousingModalProps> = ({
   };
 
   // Submit Bien
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
@@ -188,7 +188,7 @@ export const NewHousingModal: React.FC<NewHousingModalProps> = ({
     // Default photo fallback if empty
     const finalPhoto = photo.trim() || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80';
 
-    const res = addLogement(
+    const res = await addLogement(
       {
         nom: nom.trim(),
         type,

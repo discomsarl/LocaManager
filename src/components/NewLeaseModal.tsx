@@ -39,6 +39,7 @@ export const NewLeaseModal: React.FC<NewLeaseModalProps> = ({
   const [telephonePrincipal, setTelephonePrincipal] = useState('');
   const [telephoneSecondaire, setTelephoneSecondaire] = useState('');
   const [email, setEmail] = useState('');
+  const [accountPassword, setAccountPassword] = useState('');
   const [profession, setProfession] = useState('');
   const [employeur, setEmployeur] = useState('');
   const [contactUrgenceNom, setContactUrgenceNom] = useState('');
@@ -102,9 +103,13 @@ export const NewLeaseModal: React.FC<NewLeaseModalProps> = ({
   // Real-time calculation of dates
   const { theoriqueDate, reelleDate } = computeLeaseExpiry(dateDebut, dureeMois, moisAvance);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedPieceIds.length === 0) return;
+    if (!email || accountPassword.length < 8 || !/[A-Z]/.test(accountPassword) || !/[0-9]/.test(accountPassword)) {
+      alert('Un email et un mot de passe d’accès (8 caractères minimum, une majuscule et un chiffre) sont obligatoires.');
+      return;
+    }
 
     if (typePersonne === 'personne_morale') {
       if (!raisonSociale || !niu || !telephonePrincipal || !nomGerant || !telephoneGerant || !email) {
@@ -112,7 +117,7 @@ export const NewLeaseModal: React.FC<NewLeaseModalProps> = ({
         return;
       }
 
-      createLocataireAndBail(
+      const result = await createLocataireAndBail(
         {
           logement_id: selectedLogementId,
           piece_id: selectedPieceIds[0],
@@ -128,6 +133,7 @@ export const NewLeaseModal: React.FC<NewLeaseModalProps> = ({
           telephone_principal: telephonePrincipal,
           telephone_secondaire: telephoneGerant,
           email: email,
+          accountPassword,
           contact_urgence_nom: `${nomGerant} (Gérant)`,
           contact_urgence_telephone: telephoneGerant,
           profession: 'Entreprise / Société',
@@ -152,6 +158,10 @@ export const NewLeaseModal: React.FC<NewLeaseModalProps> = ({
           clause_renouvellement: clauseRenouvellement
         }
       );
+      if (!result.success) {
+        alert(result.error || 'Impossible d’enregistrer le locataire.');
+        return;
+      }
     } else {
       // Personne physique
       if (!nomComplet || !telephonePrincipal || !cniPasseport) {
@@ -159,7 +169,7 @@ export const NewLeaseModal: React.FC<NewLeaseModalProps> = ({
         return;
       }
 
-      createLocataireAndBail(
+      const result = await createLocataireAndBail(
         {
           logement_id: selectedLogementId,
           piece_id: selectedPieceIds[0],
@@ -171,6 +181,7 @@ export const NewLeaseModal: React.FC<NewLeaseModalProps> = ({
           telephone_principal: telephonePrincipal,
           telephone_secondaire: telephoneSecondaire,
           email: email,
+          accountPassword,
           contact_urgence_nom: contactUrgenceNom,
           contact_urgence_telephone: contactUrgenceTelephone,
           profession: profession,
@@ -195,6 +206,10 @@ export const NewLeaseModal: React.FC<NewLeaseModalProps> = ({
           clause_renouvellement: clauseRenouvellement
         }
       );
+      if (!result.success) {
+        alert(result.error || 'Impossible d’enregistrer le locataire.');
+        return;
+      }
     }
 
     onClose();
@@ -547,6 +562,24 @@ export const NewLeaseModal: React.FC<NewLeaseModalProps> = ({
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-3">
+            <div>
+              <h4 className="font-bold text-[14px] text-emerald-950">Accès personnel du locataire</h4>
+              <p className="text-[11px] text-emerald-800 mt-1">Ces identifiants permettront au locataire d&apos;ouvrir son portail et de modifier ses informations.</p>
+            </div>
+            <div>
+              <label className="block text-[12px] font-bold text-[#45464d] mb-1">Mot de passe initial *</label>
+              <input
+                type="password"
+                value={accountPassword}
+                onChange={(e) => setAccountPassword(e.target.value)}
+                placeholder="8 caractères, une majuscule et un chiffre"
+                className="w-full px-3 py-2 bg-white border border-emerald-300 rounded-xl text-[13px]"
+                required
+              />
+            </div>
           </div>
 
           {/* Section 2: Lot & Housing */}
