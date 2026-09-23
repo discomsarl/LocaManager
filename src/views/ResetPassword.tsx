@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CheckCircle2, KeyRound } from 'lucide-react';
 import { authClient } from '../lib/auth-client';
+import { PasswordInput } from '../components/PasswordInput';
 
 export const ResetPassword: React.FC = () => {
   const [password, setPassword] = useState('');
@@ -14,7 +15,7 @@ export const ResetPassword: React.FC = () => {
     event.preventDefault();
     setError(null);
     if (!token) return setError('Ce lien est invalide ou a expiré. Demande un nouveau lien.');
-    if (password.length < 6) return setError('Le mot de passe doit contenir au moins 6 caractères.');
+    if (password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) return setError('Le mot de passe doit contenir 8 caractères, une majuscule et un chiffre.');
     if (password !== confirmation) return setError('Les deux mots de passe ne correspondent pas.');
 
     setLoading(true);
@@ -47,10 +48,10 @@ export const ResetPassword: React.FC = () => {
             <div>
               <KeyRound className="mb-3 h-8 w-8 text-indigo-600" />
               <h1 className="text-xl font-bold text-slate-900">Nouveau mot de passe</h1>
-              <p className="mt-2 text-sm text-slate-600">Choisis un mot de passe d’au moins 6 caractères.</p>
+              <p className="mt-2 text-sm text-slate-600">Choisis un mot de passe de 8 caractères avec une majuscule et un chiffre.</p>
             </div>
-            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={6} autoComplete="new-password" placeholder="Nouveau mot de passe" className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100" />
-            <input type="password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} required minLength={6} autoComplete="new-password" placeholder="Confirmer le mot de passe" className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100" />
+            <PasswordInput value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete="new-password" placeholder="Nouveau mot de passe" className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100" />
+            <PasswordInput value={confirmation} onChange={(event) => setConfirmation(event.target.value)} required minLength={8} autoComplete="new-password" placeholder="Confirmer le mot de passe" className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100" />
             {error && <p className="text-sm text-red-600">{error}</p>}
             <button type="submit" disabled={loading || !token} className="w-full rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">{loading ? 'Mise à jour…' : 'Enregistrer le mot de passe'}</button>
           </form>

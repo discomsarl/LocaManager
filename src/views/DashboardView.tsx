@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { PasswordInput } from '../components/PasswordInput';
 import { 
   Building2, 
   CheckCircle, 
@@ -701,8 +702,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <label className="block font-bold text-slate-700 mb-1">
                     Mot de passe initial :
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={gerantPassword}
                     onChange={(e) => setGerantPassword(e.target.value)}
                     placeholder="Par défaut : passer123"

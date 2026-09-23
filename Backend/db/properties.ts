@@ -11,6 +11,7 @@ export async function getBiensAndLogements(userUid: string) {
       where: { proprietaireId: user.id },
       include: {
         logements: {
+          take: 500,
           orderBy: [
             { etage: 'asc' },
             { numero: 'asc' },

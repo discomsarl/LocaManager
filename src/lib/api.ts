@@ -27,6 +27,21 @@ export const getApiAuthToken = async (): Promise<string | null> => {
   return currentAuthToken;
 };
 
+export async function createSuperAdminAccount(data: { name: string; email: string; password: string }) {
+  const response = await fetch(`${apiBaseUrl}/api/setup/superadmin`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+    credentials: 'include',
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    const details = Array.isArray(result.details) ? ` ${result.details.join(' ')}` : '';
+    throw new Error(`${result.error || 'Impossible de créer le compte SuperAdmin.'}${details}`);
+  }
+  return result as { success: boolean; requiresEmailVerification: boolean; message: string };
+}
+
 async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = await getApiAuthToken();
   const headers = new Headers(options.headers || {});

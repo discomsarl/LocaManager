@@ -1,10 +1,29 @@
 import { Router, Response } from 'express';
 import { randomBytes } from 'node:crypto';
 import { fromNodeHeaders } from 'better-auth/node';
-import { auth } from '../auth.ts';
+import { auth, sendPasswordChangeNotification } from '../auth.ts';
 import { prisma } from '../db/index.ts';
 import { requireAuth, AuthRequest } from '../middleware/auth.ts';
+import { validateBody } from '../middleware/validate.ts';
 import { getOrCreateUser, getUserWithDetails, updateUserProfile } from '../db/users.ts';
+import { z } from 'zod';
+
+const passwordSchema = z.string().min(8).regex(/[A-Z]/).regex(/[0-9]/);
+const passwordChangeSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: passwordSchema,
+  confirmPassword: z.string().min(1),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: 'Les mots de passe ne correspondent pas.',
+  path: ['confirmPassword'],
+});
+const emailChangeSchema = z.object({
+  currentPassword: z.string().min(1),
+  newEmail: z.string().email().transform((email) => email.trim().toLowerCase()),
+});
+export const profileUpdateSchema = z.object({
+  currentPassword: z.string().min(1),
+}).passthrough();
 
 export async function handleSyncUser(req: AuthRequest, res: Response) {
   try {
@@ -83,25 +102,23 @@ function getIp(req: AuthRequest) {
   return req.ip || req.headers['x-forwarded-for']?.toString().split(',')[0].trim() || null;
 }
 
-router.post('/security/password', requireAuth, async (req: AuthRequest, res: Response) => {
+router.post('/security/password', requireAuth, validateBody(passwordChangeSchema), async (req: AuthRequest, res: Response) => {
   const uid = req.user?.uid;
   if (!uid) return res.status(401).json({ error: 'Non authentifié' });
   if (!allowSecurityAttempt(`${uid}:password`)) return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans une minute.' });
 
   const { currentPassword, newPassword, confirmPassword } = req.body || {};
-  if (!currentPassword || !newPassword || newPassword !== confirmPassword) {
-    return res.status(400).json({ error: 'Mot de passe actuel, nouveau mot de passe et confirmation requis.' });
-  }
-  if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
-    return res.status(400).json({ error: 'Le nouveau mot de passe doit contenir 8 caractères, une majuscule et un chiffre.' });
-  }
-
   try {
     await auth.api.changePassword({
       headers: fromNodeHeaders(req.headers),
       body: { currentPassword, newPassword, revokeOtherSessions: true },
     });
     await prisma.securityAuditLog.create({ data: { userId: req.dbUser?.id, action: 'PASSWORD_CHANGED', ipAddress: getIp(req) } });
+    try {
+      await sendPasswordChangeNotification(req.user.email);
+    } catch (error) {
+      console.error('E-mail de notification de changement non envoyé:', error);
+    }
     console.info(`[security] Password changed for ${uid}`);
     return res.json({ success: true });
   } catch {
@@ -109,14 +126,12 @@ router.post('/security/password', requireAuth, async (req: AuthRequest, res: Res
   }
 });
 
-router.post('/security/email', requireAuth, async (req: AuthRequest, res: Response) => {
+router.post('/security/email', requireAuth, validateBody(emailChangeSchema), async (req: AuthRequest, res: Response) => {
   const uid = req.user?.uid;
   if (!uid) return res.status(401).json({ error: 'Non authentifié' });
   if (!allowSecurityAttempt(`${uid}:email`)) return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans une minute.' });
 
-  const newEmail = String(req.body?.newEmail || '').trim().toLowerCase();
-  const currentPassword = String(req.body?.currentPassword || '');
-  if (!newEmail || !currentPassword || !/^\S+@\S+\.\S+$/.test(newEmail)) return res.status(400).json({ error: 'Nouvel e-mail et mot de passe actuel requis.' });
+  const { newEmail, currentPassword } = req.body;
 
   try {
     await auth.api.verifyPassword({ headers: fromNodeHeaders(req.headers), body: { password: currentPassword } });
@@ -159,6 +174,6 @@ router.post('/sync', requireAuth, handleSyncUser);
 router.get('/me', requireAuth, handleGetCurrentUser);
 
 // Update profile details (RCS, Contribuable, Nom, etc.)
-router.put('/profile', requireAuth, handleUpdateProfile);
+router.put('/profile', requireAuth, validateBody(profileUpdateSchema), handleUpdateProfile);
 
 export default router;

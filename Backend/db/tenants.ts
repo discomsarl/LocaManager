@@ -178,6 +178,7 @@ export async function getBaux(userUid: string) {
         },
         paiements: {
           orderBy: { datePaiement: 'desc' },
+          take: 5,
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -390,6 +391,7 @@ export async function getPaiements(userUid: string) {
           },
         },
         orderBy: { datePaiement: 'desc' },
+        take: 100,
       });
     }
 
@@ -413,6 +415,7 @@ export async function getPaiements(userUid: string) {
         },
       },
       orderBy: { datePaiement: 'desc' },
+      take: 100,
     });
 
     return paiements;

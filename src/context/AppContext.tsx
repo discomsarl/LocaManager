@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { 
   UserAccount, 
   UserRole,
@@ -285,6 +286,7 @@ const setStorageItem = (key: string, value: string): void => {
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const queryClient = useQueryClient();
   // Load initial from localStorage or defaults
   const [allUsers, setAllUsers] = useState<UserAccount[]>(() => {
     const saved = getStorageItem('locamanager_users');
@@ -302,6 +304,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saved = getStorageItem('locamanager_is_authenticated');
     return saved === 'true';
   });
+  const [isAuthSessionChecked, setIsAuthSessionChecked] = useState(false);
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
@@ -352,6 +355,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveTab(user.role === 'superadmin' ? 'superadmin' : user.role === 'locataire' ? 'locataire_portal' : 'dashboard');
       } catch (err) {
         console.warn('Erreur vérification session Better Auth:', err);
+      } finally {
+        if (active) setIsAuthSessionChecked(true);
       }
     };
 
@@ -536,6 +541,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isLoadingBackend, setIsLoadingBackend] = useState<boolean>(false);
 
   const syncWithBackend = useCallback(async () => {
+    if (!isAuthSessionChecked || !isAuthenticated) {
+      setIsBackendConnected(false);
+      setIsLoadingBackend(false);
+      return;
+    }
+
     setIsLoadingBackend(true);
     try {
       setApiAuthToken(
@@ -549,8 +560,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await syncUserProfile(currentUser.name);
       }
 
+      // Independent collections load together; Query keeps the previous result visible.
+      const results = await Promise.allSettled([
+        queryClient.fetchQuery({ queryKey: ['biens-logements', currentUserId], queryFn: fetchBiensAndLogements }),
+        queryClient.fetchQuery({ queryKey: ['locataires', currentUserId], queryFn: fetchLocataires }),
+        queryClient.fetchQuery({ queryKey: ['baux', currentUserId], queryFn: fetchBaux }),
+        queryClient.fetchQuery({ queryKey: ['paiements', currentUserId], queryFn: fetchPaiements }),
+        queryClient.fetchQuery({ queryKey: ['gerants', currentUserId], queryFn: fetchGerantsApi }),
+        queryClient.fetchQuery({ queryKey: ['activites-gerant', currentUserId], queryFn: () => fetchActivitesGerantApi() }),
+      ]);
+      const getResult = <T,>(index: number, fallback: T): T => {
+        const result = results[index];
+        return result.status === 'fulfilled' ? result.value as T : fallback;
+      };
+      const data = getResult(0, { biens: [], logements: [] });
+      const dbLocataires = getResult(1, [] as any[]);
+      const dbBaux = getResult(2, [] as any[]);
+      const dbPaiements = getResult(3, [] as any[]);
+      const dbGerants = getResult(4, [] as any[]);
+      const dbActivites = getResult(5, [] as any[]);
+
       // 2. Fetch Biens & Logements from PostgreSQL Cloud SQL
-      const data = await fetchBiensAndLogements();
       let currentBiens = data?.biens || [];
       let currentUnits = data?.logements || [];
 
@@ -596,8 +626,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setPieces(mappedPieces);
       }
 
-      // 3. Fetch Locataires from PostgreSQL
-      const dbLocataires = await fetchLocataires();
+      // 3. Apply Locataires from PostgreSQL
       {
         const mappedLoc: Locataire[] = dbLocataires.map((l: any) => ({
           id: String(l.id),
@@ -619,8 +648,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setLocataires(mappedLoc);
       }
 
-      // 4. Fetch Baux from PostgreSQL
-      const dbBaux = await fetchBaux();
+      // 4. Apply Baux from PostgreSQL
       {
         const mappedBaux: Bail[] = dbBaux.map((b: any) => {
           const startDate = b.dateDebut || '2026-01-01';
@@ -646,8 +674,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setBaux(mappedBaux);
       }
 
-      // 5. Fetch Paiements from PostgreSQL
-      const dbPaiements = await fetchPaiements();
+      // 5. Apply Paiements from PostgreSQL
       {
         const mappedPaiements: Paiement[] = dbPaiements.map((p: any) => ({
           id: String(p.id),
@@ -669,8 +696,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setPaiements(mappedPaiements);
       }
 
-      // 6. Fetch Gérants Adjoints from PostgreSQL
-      const dbGerants = await fetchGerantsApi();
+      // 6. Apply Gérants Adjoints from PostgreSQL
       if (dbGerants && dbGerants.length > 0) {
         setAllUsers(prev => {
           const nonGerants = prev.filter(u => u.role !== 'gerant_adjoint');
@@ -700,8 +726,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
 
-      // 7. Fetch Activites Gerants from PostgreSQL
-      const dbActivites = await fetchActivitesGerantApi();
+      // 7. Apply Activites Gerants from PostgreSQL
       if (dbActivites && dbActivites.length > 0) {
         setActivitesGerant(dbActivites);
       }
@@ -713,7 +738,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } finally {
       setIsLoadingBackend(false);
     }
-  }, [currentUserId, currentUser?.name, currentUser?.role]);
+  }, [currentUserId, currentUser?.name, currentUser?.role, isAuthSessionChecked, isAuthenticated, queryClient]);
 
   useEffect(() => {
     syncWithBackend();
@@ -834,7 +859,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const result = await authClient.signIn.social({
         provider: 'google',
-        callbackURL: window.location.origin,
+        callbackURL: `${window.location.origin}/verify-email`,
       });
       if (result.error) {
         return { success: false, error: result.error.message || 'Erreur de connexion avec Google.' };
@@ -875,23 +900,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         name: data.name.trim(),
         email: normalizedEmail,
         password: data.password,
+        callbackURL: `${window.location.origin}/verify-email`,
       });
       if (result.error || !result.data?.user) {
         return { success: false, error: result.error?.message || 'Impossible de créer le compte.' };
       }
 
-      const newUserId = result.data.user.id;
-      const syncedProfile = await syncUserProfile(data.name.trim());
-      if (!syncedProfile?.success || !syncedProfile.user) {
-        return { success: false, error: 'Le compte a été créé mais son profil PostgreSQL n’a pas pu être synchronisé.' };
-      }
-
-      return completeOwnerRegistration(newUserId);
+      return completeOwnerRegistration(result.data.user.id, false);
     } catch (error: any) {
       return { success: false, error: error?.message || 'Impossible de créer le compte.' };
     }
 
-    function completeOwnerRegistration(newUserId: string) {
+    function completeOwnerRegistration(newUserId: string, authenticated: boolean) {
 
     const plan = subscriptionPlans.find(p => p.id === data.planId) || subscriptionPlans[1];
     const dureeMois = data.dureeMois || 1;
@@ -917,7 +937,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       abonnement_id: data.planId,
       role: 'bailleur',
       created_at: todayStr,
-      emailVerified: true
+      emailVerified: authenticated
     };
 
     const newSubRecord: Subscription = {
@@ -955,15 +975,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setNotifications(prev => [welcomeNotif, ...prev]);
 
-    // Automatically set as authenticated and active user
-    setCurrentUserId(newUserId);
-    setIsAuthenticated(true);
-    setStorageItem('locamanager_active_user_id', newUserId);
-    setStorageItem('locamanager_is_authenticated', 'true');
-    setActiveTab('dashboard');
+    if (authenticated) {
+      setCurrentUserId(newUserId);
+      setIsAuthenticated(true);
+      setStorageItem('locamanager_active_user_id', newUserId);
+      setStorageItem('locamanager_is_authenticated', 'true');
+      setActiveTab('dashboard');
+    }
 
     return { 
-      success: true, 
+      success: true,
+      pendingVerification: !authenticated,
       user: newUser, 
       subscription: newSubRecord 
     };

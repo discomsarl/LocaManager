@@ -98,6 +98,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
+  const [showRegConfirmPassword, setShowRegConfirmPassword] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(true);
 
   // Step 2 Fields: Selected Plan
@@ -269,8 +270,8 @@ export const AuthView: React.FC<AuthViewProps> = ({
       setErrorMsg('Veuillez renseigner votre numéro de téléphone.');
       return;
     }
-    if (!regPassword || regPassword.length < 6) {
-      setErrorMsg('Le mot de passe doit comporter au moins 6 caractères.');
+    if (!regPassword || regPassword.length < 8 || !/[A-Z]/.test(regPassword) || !/[0-9]/.test(regPassword)) {
+      setErrorMsg('Le mot de passe doit comporter 8 caractères, une majuscule et un chiffre.');
       return;
     }
     if (regPassword !== regConfirmPassword) {
@@ -333,6 +334,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
     if (res.success && res.subscription) {
       setCreatedSubscription(res.subscription);
+      setSuccessMsg('Compte créé. Consultez votre boîte e-mail et confirmez votre adresse avant de vous connecter.');
       setRegStep(5);
 
       try {
@@ -826,7 +828,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                       <div className="relative">
                         <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                         <input
-                          type={showRegPassword ? 'text' : 'password'}
+                          type={showRegConfirmPassword ? 'text' : 'password'}
                           id="reg-confirm-password-input"
                           value={regConfirmPassword}
                           onChange={(e) => setRegConfirmPassword(e.target.value)}
@@ -834,6 +836,13 @@ export const AuthView: React.FC<AuthViewProps> = ({
                           required
                           className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-600"
                         />
+                        <button
+                          type="button"
+                          onClick={() => setShowRegConfirmPassword(!showRegConfirmPassword)}
+                          className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          {showRegConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1304,7 +1313,16 @@ export const AuthView: React.FC<AuthViewProps> = ({
         {/* Footer info */}
         <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 px-6">
           <span>🔒 Chiffrement SSL 256 bits · DISCOM SaaS</span>
-          <span>Support : support@discom.cm</span>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => window.location.assign('/superadmin-setup')}
+              className="text-indigo-600 hover:underline"
+            >
+              Initialiser le SuperAdmin
+            </button>
+            <span>Support : support@discom.cm</span>
+          </div>
         </div>
 
       </div>

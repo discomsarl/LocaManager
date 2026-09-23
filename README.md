@@ -25,11 +25,15 @@ L'application utilise Better Auth avec PostgreSQL pour les comptes, sessions et 
 
 ### Configuration locale
 
-1. Configurez `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `FRONTEND_URL` et `SUPERADMIN_EMAIL` depuis `.env.example`.
-2. Exécutez `npm run db:generate`, puis `npx prisma db push --schema=prisma/schema.prisma` pour créer les tables Better Auth dans votre base PostgreSQL.
+1. Configurez `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `FRONTEND_URL`, `SUPERADMIN_EMAIL` et `SUPERADMIN_BOOTSTRAP_KEY` depuis `.env.example`.
+2. Exécutez `npm run db:generate`, puis `npx prisma db push --schema=Backend/prisma/schema.prisma` pour créer les tables Better Auth dans votre base PostgreSQL.
 3. Lancez `npm run dev`.
 
 L'authentification e-mail/mot de passe est active. Pour Google, renseignez également `GOOGLE_CLIENT_ID` et `GOOGLE_CLIENT_SECRET`, puis déclarez l'URL de rappel Better Auth (`/api/auth/callback/google`) dans Google Cloud.
+
+### Recréer le compte SuperAdmin après un reset
+
+Si la base ne contient aucun utilisateur `SUPER_ADMIN`, ouvrez `/superadmin-setup`. Saisissez le nom, l'e-mail, le mot de passe et la valeur de `SUPERADMIN_BOOTSTRAP_KEY` configurée uniquement côté serveur. La création est refusée dès qu'un SuperAdmin existe déjà. Si la vérification d'e-mail est active, confirmez le lien reçu avant de vous connecter.
 
 ### Production
 

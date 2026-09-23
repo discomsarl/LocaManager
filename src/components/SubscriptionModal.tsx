@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { SubscriptionPlan, Subscription } from '../types';
 import { formatFCFA } from '../utils/formatters';
+import { PasswordInput } from './PasswordInput';
 import confetti from 'canvas-confetti';
 import { 
   X, 
@@ -782,8 +783,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                             </div>
                             <div>
                               <label className="block text-[11px] font-bold text-slate-700 mb-0.5">CVC</label>
-                              <input
-                                type="password"
+                              <PasswordInput
                                 maxLength={4}
                                 value={cardCvc}
                                 onChange={(e) => setCardCvc(e.target.value)}

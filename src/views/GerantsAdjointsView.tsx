@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { ActiviteGerantType, UserAccount } from '../types';
+import { PasswordInput } from '../components/PasswordInput';
 import { 
   Users, 
   UserPlus, 
@@ -825,8 +826,7 @@ export const GerantsAdjointsView: React.FC = () => {
                   <label className="block font-bold text-slate-700 mb-1">
                     Mot de passe initial de connexion :
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Par défaut : password123"
@@ -1011,8 +1011,7 @@ export const GerantsAdjointsView: React.FC = () => {
                   <label className="block font-bold text-slate-700 mb-1">
                     Nouveau mot de passe (laisser vide pour ne pas modifier) :
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={editPassword}
                     onChange={(e) => setEditPassword(e.target.value)}
                     placeholder="Laisser vide si inchangé"

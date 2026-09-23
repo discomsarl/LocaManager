@@ -6,7 +6,7 @@ import { toNodeHandler } from 'better-auth/node';
 import { auth } from './auth.ts';
 
 // Routes
-import authRouter, { handleSyncUser, handleGetCurrentUser, handleUpdateProfile } from './routes/auth.ts';
+import authRouter, { handleSyncUser, handleGetCurrentUser, handleUpdateProfile, profileUpdateSchema } from './routes/auth.ts';
 import propertyRouter from './routes/properties.ts';
 import subscriptionRouter from './routes/subscriptions.ts';
 import locatairesRouter from './routes/locataires.ts';
@@ -14,7 +14,9 @@ import bauxRouter from './routes/baux.ts';
 import paiementsRouter from './routes/paiements.ts';
 import gerantsRouter from './routes/gerants.ts';
 import verifyQuittanceRouter from './routes/verifyQuittance.ts';
+import superadminSetupRouter from './routes/superadminSetup.ts';
 import { requireAuth } from './middleware/auth.ts';
+import { validateBody } from './middleware/validate.ts';
 
 export async function startBackendServer() {
   const app = express();
@@ -62,7 +64,10 @@ export async function startBackendServer() {
   // Custom User Profile Endpoints (mounted before Better Auth catch-all)
   app.post('/api/auth/sync', express.json(), requireAuth, handleSyncUser);
   app.get('/api/auth/me', requireAuth, handleGetCurrentUser);
-  app.put('/api/auth/profile', express.json(), requireAuth, handleUpdateProfile);
+  app.put('/api/auth/profile', express.json(), requireAuth, validateBody(profileUpdateSchema), handleUpdateProfile);
+
+  // One-time SuperAdmin bootstrap, available only while no SuperAdmin exists.
+  app.use('/api/setup/superadmin', express.json(), superadminSetupRouter);
 
   // Mount Better Auth handler for all /api/auth/* routes (sign-in, sign-up, sign-out, session, etc.)
   // Express 5 wildcard syntax: *all

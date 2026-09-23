@@ -27,6 +27,8 @@ import { GerantsAdjointsView } from './views/GerantsAdjointsView';
 import { VerifyQuittancePublicView } from './views/VerifyQuittancePublicView';
 import { ForgotPassword } from './views/ForgotPassword';
 import { ResetPassword } from './views/ResetPassword';
+import { VerifyEmail } from './views/VerifyEmail';
+import { SuperAdminSetup } from './views/SuperAdminSetup';
 
 const MainLayout: React.FC = () => {
   const { 
@@ -45,6 +47,8 @@ const MainLayout: React.FC = () => {
   const pathname = typeof window === 'undefined' ? '/' : window.location.pathname;
   if (pathname === '/forgot-password') return <ForgotPassword />;
   if (pathname === '/reset-password') return <ResetPassword />;
+  if (pathname === '/verify-email') return <VerifyEmail />;
+  if (pathname === '/superadmin-setup') return <SuperAdminSetup />;
 
   // Check URL parameters for public verification link (e.g. ?verify=QUIT-CM-2025-1234 or /verify/...)
   const [publicVerifyCode, setPublicVerifyCode] = useState<string | null>(() => {

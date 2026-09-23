@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { formatFCFA } from '../utils/formatters';
 import { changePasswordApi, requestEmailChangeApi } from '../lib/api';
+import { PasswordInput } from '../components/PasswordInput';
 
 export const ParametresView: React.FC = () => {
   const { 
@@ -229,17 +230,17 @@ export const ParametresView: React.FC = () => {
         {securityError && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs">{securityError}</div>}
 
         <form onSubmit={handleChangePassword} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Mot de passe actuel" required className="px-3 py-2.5 border border-slate-300 rounded-xl text-xs" />
-          <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Nouveau mot de passe" required minLength={8} className="px-3 py-2.5 border border-slate-300 rounded-xl text-xs" />
+          <PasswordInput value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Mot de passe actuel" required className="px-3 py-2.5 border border-slate-300 rounded-xl text-xs" />
+          <PasswordInput value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Nouveau mot de passe" required minLength={8} className="px-3 py-2.5 border border-slate-300 rounded-xl text-xs" />
           <div className="flex gap-2">
-            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirmation" required minLength={8} className="min-w-0 flex-1 px-3 py-2.5 border border-slate-300 rounded-xl text-xs" />
+            <PasswordInput value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirmation" required minLength={8} className="min-w-0 rounded-xl border border-slate-300 py-2.5 text-xs" />
             <button type="submit" className="px-3 py-2 bg-[#0b1c30] text-white rounded-xl text-xs font-bold">Modifier</button>
           </div>
         </form>
 
         <form onSubmit={handleRequestEmailChange} className="flex flex-col sm:flex-row gap-3 border-t border-slate-200 pt-5">
           <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Nouvelle adresse e-mail" required className="flex-1 px-3 py-2.5 border border-slate-300 rounded-xl text-xs" />
-          <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Mot de passe actuel" required className="px-3 py-2.5 border border-slate-300 rounded-xl text-xs" />
+          <PasswordInput value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Mot de passe actuel" required className="px-3 py-2.5 border border-slate-300 rounded-xl text-xs" />
           <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold">Demander le changement</button>
         </form>
       </div>

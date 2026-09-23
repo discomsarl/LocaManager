@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { TenantPersonType } from '../types';
 import { X, UserPlus, FileText, Calendar, Clock, DollarSign, ShieldCheck, Building, User, AlertCircle } from 'lucide-react';
 import { computeLeaseExpiry, formatFCFA } from '../utils/formatters';
+import { PasswordInput } from './PasswordInput';
 
 interface NewLeaseModalProps {
   isOpen: boolean;
@@ -571,8 +572,7 @@ export const NewLeaseModal: React.FC<NewLeaseModalProps> = ({
             </div>
             <div>
               <label className="block text-[12px] font-bold text-[#45464d] mb-1">Mot de passe initial *</label>
-              <input
-                type="password"
+              <PasswordInput
                 value={accountPassword}
                 onChange={(e) => setAccountPassword(e.target.value)}
                 placeholder="8 caractères, une majuscule et un chiffre"

@@ -7,13 +7,13 @@
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "tsx server.ts",
     "dev:client": "vite",
-    "build": "npx prisma generate && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build": "npx prisma generate --schema=Backend/prisma/schema.prisma && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "db:validate": "prisma validate --schema=prisma/schema.prisma",
-    "db:generate": "prisma generate --schema=prisma/schema.prisma",
-    "db:studio": "prisma studio --schema=prisma/schema.prisma"
+    "db:validate": "prisma validate --schema=Backend/prisma/schema.prisma",
+    "db:generate": "prisma generate --schema=Backend/prisma/schema.prisma",
+    "db:studio": "prisma studio --schema=Backend/prisma/schema.prisma"
   },
   "dependencies": {
     "@better-auth/prisma-adapter": "^1.7.5",
@@ -22,6 +22,7 @@
     "@prisma/client": "^6.4.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@tailwindcss/vite": "^4.1.14",
+    "@tanstack/react-query": "^5.103.2",
     "@types/canvas-confetti": "^1.9.0",
     "@types/qrcode": "^1.5.6",
     "@vitejs/plugin-react": "^5.0.4",

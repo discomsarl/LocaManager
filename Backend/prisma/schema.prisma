@@ -25,12 +25,16 @@ model User {
   isVerified           Boolean?       @default(true) @map("is_verified")
   createdAt            DateTime?      @default(now()) @map("created_at")
   updatedAt            DateTime?      @default(now()) @updatedAt @map("updated_at")
+  pendingEmail         String?        @map("pending_email")
+  pendingEmailExpiresAt DateTime?     @map("pending_email_expires_at")
+  pendingEmailToken    String?        @unique @map("pending_email_token")
 
   biens                Bien[]
   subscriptions        Subscription[]
   locataires           Locataire[]
   gerantsAdjoints      GerantAdjoint[]
   activitesGerant      ActiviteGerant[]
+  securityAuditLogs    SecurityAuditLog[]
 
   @@map("users")
 }
@@ -79,7 +83,6 @@ model Bien {
   description    String?
   photo          String?
   createdAt      DateTime?  @default(now()) @map("created_at")
-
   proprietaire   User       @relation(fields: [proprietaireId], references: [id])
   logements      Logement[]
 
@@ -118,12 +121,25 @@ model Locataire {
   profession     String?
   contactGarant  String?    @map("contact_garant")
   createdAt      DateTime?  @default(now()) @map("created_at")
+  authUid        String?    @unique @map("auth_uid")
 
   proprietaire   User       @relation(fields: [proprietaireId], references: [id])
   baux           Bail[]
   paiements      Paiement[]
 
   @@map("locataires")
+}
+
+model SecurityAuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  action    String
+  ipAddress String?   @map("ip_address")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@map("security_audit_logs")
 }
 
 model Bail {
