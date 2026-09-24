@@ -89,7 +89,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [gerantModalError, setGerantModalError] = useState<string | null>(null);
   const [gerantModalSuccess, setGerantModalSuccess] = useState<string | null>(null);
 
-  const handleCreateGerantSubmit = (e: React.FormEvent) => {
+  const handleCreateGerantSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGerantModalError(null);
 
@@ -98,11 +98,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       return;
     }
 
-    const result = createGerantAdjoint({
+    const result = await createGerantAdjoint({
       name: gerantName,
       email: gerantEmail,
       phonenumber: gerantPhone,
-      password: gerantPassword || 'passer123',
+      password: gerantPassword || 'Password123',
       permissions: gerantPermissions
     });
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   Settings, 
@@ -38,8 +38,8 @@ export const ParametresView: React.FC = () => {
   const [email, setEmail] = useState(currentUser.email);
   const [phonenumber, setPhonenumber] = useState(currentUser.phonenumber);
   const [pays, setPays] = useState(currentUser.pays);
-  const [ville, setVille] = useState(currentUser.ville || 'Douala');
-  const [entreprise, setEntreprise] = useState(currentUser.entreprise || 'DISCOM Immo SARL');
+  const [ville, setVille] = useState(currentUser.ville || '');
+  const [entreprise, setEntreprise] = useState(currentUser.entreprise || '');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
@@ -50,6 +50,16 @@ export const ParametresView: React.FC = () => {
   const [newEmail, setNewEmail] = useState(currentUser.email);
   const [securityMessage, setSecurityMessage] = useState<string | null>(null);
   const [securityError, setSecurityError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setName(currentUser.name || '');
+    setEmail(currentUser.email || '');
+    setNewEmail(currentUser.email || '');
+    setPhonenumber(currentUser.phonenumber || '');
+    setPays(currentUser.pays || '');
+    setVille(currentUser.ville || '');
+    setEntreprise(currentUser.entreprise || '');
+  }, [currentUser.id, currentUser.name, currentUser.email, currentUser.phonenumber, currentUser.pays, currentUser.ville, currentUser.entreprise]);
 
   const currentPlan = subscriptionPlans.find(p => p.id === currentUser.abonnement_id) || subscriptionPlans[1];
   const userSub = subscriptions.find(s => s.user_id === currentUser.id && s.statut === 'actif');
@@ -450,9 +460,9 @@ export const ParametresView: React.FC = () => {
               <button
                 type="button"
                 disabled={deleteConfirmationText !== 'SUPPRIMER'}
-                onClick={() => {
+                onClick={async () => {
                   if (deleteConfirmationText !== 'SUPPRIMER') return;
-                  const res = deleteUser(currentUser.id);
+                  const res = await deleteUser(currentUser.id);
                   if (res.success) {
                     setIsDeleteModalOpen(false);
                   } else {

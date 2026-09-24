@@ -3,18 +3,28 @@
 import { authClient } from './auth-client';
 
 let currentAuthToken: string | null = null;
+let cachedSessionToken: string | null = null;
+let sessionTokenPromise: Promise<string | null> | null = null;
 
 export const setApiAuthToken = (token: string | null) => {
   currentAuthToken = token;
+  cachedSessionToken = token;
 };
 
 const apiBaseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
 export const getApiAuthToken = async (): Promise<string | null> => {
+  if (currentAuthToken) return currentAuthToken;
+  if (cachedSessionToken) return cachedSessionToken;
+
+  if (sessionTokenPromise) return sessionTokenPromise;
+
+  sessionTokenPromise = (async () => {
   try {
     const session = await authClient.getSession({ query: {} });
     if (session?.data?.session?.token) {
-      return session.data.session.token;
+      cachedSessionToken = session.data.session.token;
+      return cachedSessionToken;
     }
   } catch (err) {
     // Better Auth session token fallback
@@ -25,6 +35,13 @@ export const getApiAuthToken = async (): Promise<string | null> => {
   }
 
   return currentAuthToken;
+  })();
+
+  try {
+    return await sessionTokenPromise;
+  } finally {
+    sessionTokenPromise = null;
+  }
 };
 
 export async function createSuperAdminAccount(data: { name: string; email: string; password: string }) {
@@ -50,11 +67,19 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(`${apiBaseUrl}${endpoint}`, {
-    ...options,
-    headers,
-    credentials: 'include',
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 10000);
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${endpoint}`, {
+      ...options,
+      headers,
+      credentials: 'include',
+      signal: options.signal || controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   const data = await response.json();
   if (!response.ok) {
@@ -347,6 +372,39 @@ export async function fetchSubscriptionPlansApi() {
     console.error('API fetchSubscriptionPlansApi failed:', err);
     return [];
   }
+}
+
+export async function fetchSuperAdminOverviewApi() {
+  return apiFetch<{ success: boolean; users: any[]; subscriptions: any[]; plans: any[] }>('/api/subscription/admin-overview');
+}
+
+export async function createAdminUserApi(data: {
+  name: string;
+  email: string;
+  phonenumber: string;
+  entreprise?: string;
+  ville?: string;
+  planId: string;
+  dureeMois: number;
+  password: string;
+}) {
+  return apiFetch<{ success: boolean; user: any; subscription: any }>('/api/subscription/admin-users', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateAdminUserApi(uid: string, data: Record<string, unknown>) {
+  return apiFetch<{ success: boolean; user: any }>(`/api/subscription/admin-users/${encodeURIComponent(uid)}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteAdminUserApi(uid: string) {
+  return apiFetch<{ success: boolean; id: string }>(`/api/subscription/admin-users/${encodeURIComponent(uid)}`, {
+    method: 'DELETE',
+  });
 }
 
 // -------------------------------------------------------------

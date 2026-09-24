@@ -39,7 +39,7 @@ export const LocatairePortalView: React.FC = () => {
   const piece = pieces.find(p => p.id === currentLocataire?.piece_id);
   const landlord = allUsers.find(u => u.id === logement?.user_id) || allUsers[0];
 
-  const tenantPayments = paiements.filter(p => p.locataire_id === currentLocataire?.id);
+  const tenantPayments = paiements.filter(p => p.locataire_id === currentLocataire?.id && p.statut === 'paye');
   const tenantTickets = maintenanceTickets.filter(t => t.locataire_id === currentLocataire?.id);
 
   // New ticket state
@@ -183,8 +183,6 @@ export const LocatairePortalView: React.FC = () => {
               </div>
             ) : (
               tenantPayments.map((p) => {
-                const isPaid = p.statut === 'paye' || p.statut === 'partiel';
-
                 return (
                   <div key={p.id} className="p-4 bg-white hover:bg-[#f8f9ff] flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors">
                     <div>
@@ -203,19 +201,13 @@ export const LocatairePortalView: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {isPaid ? (
-                        <button 
-                          onClick={() => setSelectedQuittancePaiement(p)}
-                          className="px-3.5 py-1.5 bg-[#0b1c30] text-white text-[12px] font-bold rounded-lg hover:bg-[#1f2d40] transition-colors flex items-center gap-1.5 shadow-xs"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>Voir & Télécharger A4</span>
-                        </button>
-                      ) : (
-                        <span className="text-[11px] font-bold text-[#ba1a1a] bg-red-100 px-2.5 py-1 rounded-full">
-                          En attente de règlement
-                        </span>
-                      )}
+                      <button
+                        onClick={() => setSelectedQuittancePaiement(p)}
+                        className="px-3.5 py-1.5 bg-[#0b1c30] text-white text-[12px] font-bold rounded-lg hover:bg-[#1f2d40] transition-colors flex items-center gap-1.5 shadow-xs"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Voir & Télécharger A4</span>
+                      </button>
                     </div>
                   </div>
                 );

@@ -1,4 +1,5 @@
 import { prisma } from './index.ts';
+import { auth, emailVerificationCallbackUrl } from '../auth.ts';
 
 export interface GerantPermissions {
   gestion_biens?: boolean;
@@ -102,11 +103,21 @@ export async function createGerant(userUid: string, data: {
       throw new Error(`Un gérant avec l'adresse email "${data.email}" existe déjà.`);
     }
 
-    const gerantUid = `user_gerant_${Date.now()}`;
     const mergedPermissions = {
       ...defaultPermissions,
       ...(data.permissions || {}),
     };
+
+    const authResult = await auth.api.signUpEmail({
+      body: {
+        name: data.name.trim(),
+        email: data.email.trim().toLowerCase(),
+        password: data.password?.trim() || 'Passer123',
+        callbackURL: emailVerificationCallbackUrl,
+      },
+    });
+    if (!authResult.user) throw new Error('Impossible de créer le compte de connexion du gérant.');
+    const gerantUid = authResult.user.id;
 
     const newGerant = await prisma.gerantAdjoint.create({
       data: {
@@ -114,7 +125,7 @@ export async function createGerant(userUid: string, data: {
         name: data.name.trim(),
         email: data.email.trim().toLowerCase(),
         phonenumber: data.phonenumber.trim(),
-        password: data.password?.trim() || 'passer123',
+        password: data.password?.trim() || 'Passer123',
         statutCompte: 'actif',
         permissions: mergedPermissions as any,
         proprietaireId: user.id,
@@ -132,7 +143,7 @@ export async function createGerant(userUid: string, data: {
             nom: data.name.trim(),
             phone: data.phonenumber.trim(),
             role: 'GERANT',
-            isVerified: true,
+            isVerified: authResult.user.emailVerified,
             pays: user.pays || 'Cameroun',
             ville: user.ville || 'Douala',
           },

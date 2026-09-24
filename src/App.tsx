@@ -29,6 +29,7 @@ import { ForgotPassword } from './views/ForgotPassword';
 import { ResetPassword } from './views/ResetPassword';
 import { VerifyEmail } from './views/VerifyEmail';
 import { SuperAdminSetup } from './views/SuperAdminSetup';
+import { ConfirmEmail } from './views/ConfirmEmail';
 
 const MainLayout: React.FC = () => {
   const { 
@@ -48,6 +49,7 @@ const MainLayout: React.FC = () => {
   if (pathname === '/forgot-password') return <ForgotPassword />;
   if (pathname === '/reset-password') return <ResetPassword />;
   if (pathname === '/verify-email') return <VerifyEmail />;
+  if (pathname === '/confirm-email') return <ConfirmEmail />;
   if (pathname === '/superadmin-setup') return <SuperAdminSetup />;
 
   // Check URL parameters for public verification link (e.g. ?verify=QUIT-CM-2025-1234 or /verify/...)

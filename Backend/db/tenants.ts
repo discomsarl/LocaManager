@@ -11,6 +11,24 @@ export async function getLocataires(userUid: string) {
     });
     if (!user) return [];
 
+    if (user.role === 'LOCATAIRE') {
+      const locataire = await prisma.locataire.findFirst({
+        where: {
+          OR: [
+            { authUid: user.uid },
+            { email: user.email },
+          ],
+        },
+        include: {
+          baux: {
+            include: { logement: { include: { bien: true } } },
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+      });
+      return locataire ? [locataire] : [];
+    }
+
     const locataires = await prisma.locataire.findMany({
       where: { proprietaireId: user.id },
       include: {

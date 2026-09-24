@@ -35,7 +35,6 @@ export const Header: React.FC<HeaderProps> = ({
     currentUser, 
     notifications, 
     markNotificationAsRead, 
-    markAllNotificationsAsRead,
     searchQuery, 
     setSearchQuery,
     setActiveTab,
@@ -52,7 +51,10 @@ export const Header: React.FC<HeaderProps> = ({
   const notifRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  const unreadCount = notifications.filter(n => !n.is_read).length;
+  const visibleNotifications = currentUser.role === 'locataire'
+    ? notifications.filter(n => n.type.startsWith('echeance_'))
+    : notifications;
+  const unreadCount = visibleNotifications.filter(n => !n.is_read).length;
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -139,7 +141,11 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
                 {unreadCount > 0 && (
                   <button 
-                    onClick={markAllNotificationsAsRead}
+                    onClick={() => {
+                      visibleNotifications
+                        .filter(notification => !notification.is_read)
+                        .forEach(notification => markNotificationAsRead(notification.id));
+                    }}
                     className="text-[10px] font-bold text-emerald-600 hover:underline flex items-center gap-1"
                   >
                     <Check className="w-3 h-3" /> Tout marquer lu
@@ -148,12 +154,12 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
 
               <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
-                {notifications.length === 0 ? (
+                {visibleNotifications.length === 0 ? (
                   <div className="p-6 text-center text-xs text-slate-400">
                     Aucune notification
                   </div>
                 ) : (
-                  notifications.map((n) => {
+                  visibleNotifications.map((n) => {
                     let Icon = Info;
                     let iconBg = 'text-blue-600 bg-blue-50';
                     if (n.severity === 'error') {

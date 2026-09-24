@@ -4,6 +4,8 @@ import { auth } from '../auth.ts';
 import { prisma } from '../db/index.ts';
 import { getOrCreateUser } from '../db/users.ts';
 
+const sessionRequests = new Map<string, Promise<any>>();
+
 export interface AuthRequest extends Request {
   user?: {
     uid: string;
@@ -84,9 +86,18 @@ export const requireAuth = async (
 
   // Vérification de session Better Auth (supporte session cookie HTTP-only et Bearer token)
   try {
-    const session = await auth.api.getSession({
-      headers: fromNodeHeaders(req.headers),
-    });
+    const sessionToken = token;
+    let sessionPromise = sessionToken ? sessionRequests.get(sessionToken) : undefined;
+    if (!sessionPromise) {
+      sessionPromise = auth.api.getSession({
+        headers: fromNodeHeaders(req.headers),
+      });
+      if (sessionToken) {
+        sessionRequests.set(sessionToken, sessionPromise);
+        sessionPromise.finally(() => sessionRequests.delete(sessionToken)).catch(() => undefined);
+      }
+    }
+    const session = await sessionPromise;
 
     if (session && session.user) {
       const uid = session.user.id;

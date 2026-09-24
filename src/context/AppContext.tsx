@@ -61,6 +61,10 @@ import {
   createPaiementApi,
   updatePaiementApi,
   fetchSubscriptionPlansApi,
+  fetchSuperAdminOverviewApi,
+  createAdminUserApi,
+  updateAdminUserApi,
+  deleteAdminUserApi,
   fetchGerantsApi,
   createGerantApi,
   updateGerantApi,
@@ -107,7 +111,7 @@ interface AppContextType {
     dureeMois: number;
     modePaiement?: string;
     password?: string;
-  }) => { success: boolean; user?: UserAccount; subscription?: Subscription; error?: string };
+  }) => Promise<{ success: boolean; user?: UserAccount; subscription?: Subscription; error?: string }>;
   updateSubscriberByAdmin: (
     userId: string, 
     data: { 
@@ -120,8 +124,8 @@ interface AppContextType {
       statut?: 'actif' | 'expire' | 'essai'; 
       date_expiration?: string;
     }
-  ) => { success: boolean; error?: string };
-  deleteUser: (userId: string) => { success: boolean; message?: string; error?: string };
+  ) => Promise<{ success: boolean; error?: string }>;
+  deleteUser: (userId: string) => Promise<{ success: boolean; message?: string; error?: string }>;
   logout: () => void;
   disconnectUserByAdmin: (userId: string) => { success: boolean; message?: string };
   isAuthModalOpen: boolean;
@@ -135,7 +139,7 @@ interface AppContextType {
     phonenumber: string;
     password?: string;
     permissions?: UserAccount['permissions'];
-  }) => { success: boolean; user?: UserAccount; error?: string };
+  }) => Promise<{ success: boolean; user?: UserAccount; error?: string }>;
   updateGerantAdjoint: (id: string, updates: Partial<UserAccount>) => { success: boolean; error?: string };
   deleteGerantAdjoint: (id: string) => { success: boolean; error?: string };
   effectiveOwnerId: string;
@@ -555,19 +559,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           : null
       );
 
-      // 1. Sync User Profile in PostgreSQL
+      const isSuperAdmin = currentUser?.role === 'superadmin';
+      const canManagePortfolio = currentUser?.role === 'bailleur' || currentUser?.role === 'gerant_adjoint';
+
+      // Keep profile synchronization out of the critical rendering path.
       if (currentUser?.name) {
-        await syncUserProfile(currentUser.name);
+        void syncUserProfile(currentUser.name).catch(error => {
+          console.warn('Profil non synchronisé au démarrage:', error);
+        });
       }
 
-      // Independent collections load together; Query keeps the previous result visible.
+      // Keep the result indexes stable while skipping collections irrelevant to the role.
       const results = await Promise.allSettled([
-        queryClient.fetchQuery({ queryKey: ['biens-logements', currentUserId], queryFn: fetchBiensAndLogements }),
-        queryClient.fetchQuery({ queryKey: ['locataires', currentUserId], queryFn: fetchLocataires }),
-        queryClient.fetchQuery({ queryKey: ['baux', currentUserId], queryFn: fetchBaux }),
-        queryClient.fetchQuery({ queryKey: ['paiements', currentUserId], queryFn: fetchPaiements }),
-        queryClient.fetchQuery({ queryKey: ['gerants', currentUserId], queryFn: fetchGerantsApi }),
-        queryClient.fetchQuery({ queryKey: ['activites-gerant', currentUserId], queryFn: () => fetchActivitesGerantApi() }),
+        !isSuperAdmin
+          ? queryClient.fetchQuery({ queryKey: ['biens-logements', currentUserId], queryFn: fetchBiensAndLogements })
+          : Promise.resolve({ biens: [], logements: [] }),
+        !isSuperAdmin
+          ? queryClient.fetchQuery({ queryKey: ['locataires', currentUserId], queryFn: fetchLocataires })
+          : Promise.resolve([]),
+        !isSuperAdmin
+          ? queryClient.fetchQuery({ queryKey: ['baux', currentUserId], queryFn: fetchBaux })
+          : Promise.resolve([]),
+        !isSuperAdmin
+          ? queryClient.fetchQuery({ queryKey: ['paiements', currentUserId], queryFn: fetchPaiements })
+          : Promise.resolve([]),
+        canManagePortfolio
+          ? queryClient.fetchQuery({ queryKey: ['gerants', currentUserId], queryFn: fetchGerantsApi })
+          : Promise.resolve([]),
+        canManagePortfolio
+          ? queryClient.fetchQuery({ queryKey: ['activites-gerant', currentUserId], queryFn: () => fetchActivitesGerantApi() })
+          : Promise.resolve([]),
+        isSuperAdmin
+          ? queryClient.fetchQuery({ queryKey: ['superadmin-overview'], queryFn: fetchSuperAdminOverviewApi })
+          : Promise.resolve(null),
       ]);
       const getResult = <T,>(index: number, fallback: T): T => {
         const result = results[index];
@@ -579,6 +603,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const dbPaiements = getResult(3, [] as any[]);
       const dbGerants = getResult(4, [] as any[]);
       const dbActivites = getResult(5, [] as any[]);
+      const dbSuperAdmin = isSuperAdmin
+        ? getResult(6, null as any)
+        : null;
+
+      if (dbSuperAdmin?.success) {
+        const mappedUsers: UserAccount[] = dbSuperAdmin.users.map((user: any) => ({
+          id: String(user.uid || user.id),
+          name: user.nom || user.email,
+          email: user.email,
+          phonenumber: user.phone || '',
+          pays: user.pays || 'Cameroun',
+          ville: user.ville || '',
+          entreprise: user.nomEntreprise || '',
+          role: user.role === 'SUPER_ADMIN' ? 'superadmin' : user.role === 'LOCATAIRE' ? 'locataire' : user.role === 'GERANT' ? 'gerant_adjoint' : 'bailleur',
+          created_at: user.createdAt ? new Date(user.createdAt).toISOString().split('T')[0] : '2026-01-01',
+          emailVerified: user.isVerified ?? true,
+          statut_compte: 'actif',
+        }));
+        const mappedPlans: SubscriptionPlan[] = dbSuperAdmin.plans.map((plan: any) => ({
+          id: plan.id,
+          nom: plan.nom,
+          prix_fcfa: plan.prixMensuel || 0,
+          ca_min_fcfa: 0,
+          ca_max_fcfa: 0,
+          tranche_ca_label: plan.nom,
+          gratuit_3_premiers_mois: false,
+          max_logements: plan.maxBiens || 0,
+          max_pieces: plan.maxLogements || 0,
+          description: plan.description || '',
+          features: [],
+        }));
+        const mappedSubscriptions: Subscription[] = dbSuperAdmin.subscriptions.map((subscription: any) => ({
+          id: String(subscription.id),
+          user_id: String(subscription.userId),
+          plan_id: subscription.planId,
+          statut: String(subscription.status || 'ACTIVE').toLowerCase() === 'active' ? 'actif' : 'expire',
+          date_debut: subscription.startDate || subscription.createdAt || new Date().toISOString(),
+          date_expiration: subscription.endDate,
+          montant_paye_fcfa: subscription.plan?.prixMensuel || 0,
+          mode_paiement: 'Base de données',
+          auto_renew: false,
+        }));
+        setAllUsers(mappedUsers);
+        setSubscriptionPlans(mappedPlans.length > 0 ? mappedPlans : initialSubscriptionPlans);
+        setSubscriptions(mappedSubscriptions);
+      }
 
       // 2. Fetch Biens & Logements from PostgreSQL Cloud SQL
       let currentBiens = data?.biens || [];
@@ -992,7 +1062,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const addSubscriberByAdmin = (data: {
+  const addSubscriberByAdmin = async (data: {
     name: string;
     email: string;
     phonenumber: string;
@@ -1002,60 +1072,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     dureeMois: number;
     modePaiement?: string;
     password?: string;
-  }): { success: boolean; user?: UserAccount; subscription?: Subscription; error?: string } => {
+  }): Promise<{ success: boolean; user?: UserAccount; subscription?: Subscription; error?: string }> => {
     if (allUsers.some(u => u.email.toLowerCase() === data.email.toLowerCase())) {
       return { success: false, error: 'Un compte avec cette adresse email existe déjà.' };
     }
 
     const plan = subscriptionPlans.find(p => p.id === data.planId) || subscriptionPlans[0];
-    const newUserId = `user_bailleur_${Date.now()}`;
-    const newSubId = `sub_${Date.now()}`;
+    if (!plan) return { success: false, error: 'Aucun forfait disponible.' };
 
-    const startDate = new Date();
-    const expDate = new Date();
-    expDate.setMonth(expDate.getMonth() + (data.dureeMois || 1));
-
-    const newUser: UserAccount = {
-      id: newUserId,
-      name: data.name.trim(),
-      email: data.email.trim().toLowerCase(),
-      phonenumber: data.phonenumber.trim(),
-      pays: 'Cameroun',
-      ville: data.ville || 'Douala',
-      role: 'bailleur',
-      entreprise: data.entreprise || undefined,
-      abonnement_id: plan.id,
-      statut_compte: 'actif',
-      avatar_url: `https://picsum.photos/seed/${newUserId}/200/200`,
-      created_at: new Date().toISOString().split('T')[0]
-    };
-
-    const newSubRecord: Subscription = {
-      id: newSubId,
-      user_id: newUserId,
-      plan_id: plan.id,
-      statut: 'actif',
-      date_debut: startDate.toISOString().split('T')[0],
-      date_expiration: expDate.toISOString().split('T')[0],
-      montant_paye_fcfa: plan.prix_fcfa * (data.dureeMois || 1),
-      facture_numero: `FAC-DISCOM-${Date.now().toString().slice(-6)}`,
-      mode_paiement: data.modePaiement || 'MTN Mobile Money Cameroun',
-      reference_transaction: `SUB-ADMIN-${Math.floor(100000 + Math.random() * 900000)}`,
-      auto_renew: false,
-      is_trial_applied: false
-    };
-
-    setAllUsers(prev => [newUser, ...prev]);
-    setSubscriptions(prev => [newSubRecord, ...prev]);
-
-    return { 
-      success: true, 
-      user: newUser, 
-      subscription: newSubRecord 
-    };
+    try {
+      const result = await createAdminUserApi({
+        name: data.name.trim(),
+        email: data.email.trim().toLowerCase(),
+        phonenumber: data.phonenumber.trim(),
+        entreprise: data.entreprise,
+        ville: data.ville,
+        planId: data.planId,
+        dureeMois: data.dureeMois || 1,
+        password: data.password?.trim() || 'Password123',
+      });
+      const user = result.user;
+      const subscription = result.subscription;
+      const mappedUser: UserAccount = {
+        id: String(user.uid), name: user.nom, email: user.email, phonenumber: user.phone || '',
+        pays: user.pays || 'Cameroun', ville: user.ville || '', entreprise: user.nomEntreprise || '',
+        role: 'bailleur', abonnement_id: subscription?.planId || data.planId,
+        statut_compte: 'actif', created_at: new Date(user.createdAt || Date.now()).toISOString().split('T')[0],
+      };
+      const mappedSubscription: Subscription = {
+        id: String(subscription.id), user_id: String(user.uid), plan_id: subscription.planId,
+        statut: 'actif', date_debut: subscription.startDate || new Date().toISOString(),
+        date_expiration: subscription.endDate, montant_paye_fcfa: plan.prix_fcfa * (data.dureeMois || 1),
+        mode_paiement: data.modePaiement || 'Base de données', auto_renew: false,
+      };
+      setAllUsers(prev => [mappedUser, ...prev]);
+      setSubscriptions(prev => [mappedSubscription, ...prev]);
+      return { success: true, user: mappedUser, subscription: mappedSubscription };
+    } catch (error: any) {
+      return { success: false, error: error?.message || 'Impossible de créer cet utilisateur.' };
+    }
   };
 
-  const updateSubscriberByAdmin = (
+  const updateSubscriberByAdmin = async (
     userId: string, 
     data: { 
       name?: string; 
@@ -1067,9 +1125,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       statut?: 'actif' | 'expire' | 'essai'; 
       date_expiration?: string;
     }
-  ): { success: boolean; error?: string } => {
+  ): Promise<{ success: boolean; error?: string }> => {
     const userToUpdate = allUsers.find(u => u.id === userId);
     if (!userToUpdate) return { success: false, error: 'Abonné introuvable.' };
+
+    try {
+      await updateAdminUserApi(userId, data);
+    } catch (error: any) {
+      return { success: false, error: error?.message || 'Impossible de modifier cet abonné.' };
+    }
 
     setAllUsers(prev => prev.map(u => {
       if (u.id === userId) {
@@ -1104,13 +1168,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
-  const deleteUser = (userId: string): { success: boolean; message?: string; error?: string } => {
+  const deleteUser = async (userId: string): Promise<{ success: boolean; message?: string; error?: string }> => {
     const userToDelete = allUsers.find(u => u.id === userId);
     if (!userToDelete) {
       return { success: false, error: 'Abonné ou utilisateur introuvable.' };
     }
     if (userToDelete.role === 'superadmin') {
       return { success: false, error: 'Impossible de supprimer le compte Super Administrateur racine.' };
+    }
+
+    try {
+      await deleteAdminUserApi(userId);
+    } catch (error: any) {
+      return { success: false, error: error?.message || 'Impossible de supprimer cet utilisateur de la base de données.' };
     }
 
     // 1. Remove from allUsers
@@ -1177,13 +1247,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const gerantsAdjoints = allUsers.filter(u => u.role === 'gerant_adjoint' && u.proprietaire_id === effectiveOwnerId);
 
-  const createGerantAdjoint = (data: {
+  const createGerantAdjoint = async (data: {
     name: string;
     email: string;
     phonenumber: string;
     password?: string;
     permissions?: UserAccount['permissions'];
-  }) => {
+  }): Promise<{ success: boolean; user?: UserAccount; error?: string }> => {
     // Enforce strict limit of 1 Gérant per Landlord account
     if (gerantsAdjoints.length >= 1) {
       return {
@@ -1210,7 +1280,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       role: 'gerant_adjoint',
       proprietaire_id: effectiveOwnerId,
       created_at: new Date().toISOString().split('T')[0],
-      password: data.password || 'password123',
+      password: data.password || 'Password123',
       emailVerified: true,
       statut_compte: 'actif',
       permissions: data.permissions || {
@@ -1224,33 +1294,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
-    setAllUsers(prev => [newGerant, ...prev]);
-
-    // Log activity
-    addActiviteGerant({
-      gerant_id: newGerant.id,
-      gerant_nom: newGerant.name,
-      bailleur_id: effectiveOwnerId,
-      action_type: 'connexion',
-      titre: 'Création du compte Gérant',
-      description: `Nouveau compte Gérant créé pour ${newGerant.name} (${newGerant.email}) avec permissions modulaires.`,
-      statut: 'succes'
-    });
-
-    // Persist to PostgreSQL Prisma backend
-    createGerantApi({
-      name: newGerant.name,
-      email: newGerant.email,
-      phonenumber: newGerant.phonenumber,
-      password: data.password || 'password123',
-      permissions: newGerant.permissions,
-    }).then(res => {
-      if (res?.gerant?.id) {
-        setAllUsers(currentUsers => currentUsers.map(u => u.id === newGerant.id ? { ...u, id: res.gerant.id } : u));
-      }
-    }).catch(err => console.warn('Prisma createGerant notice:', err));
-
-    return { success: true, user: newGerant };
+    try {
+      const response = await createGerantApi({
+        name: newGerant.name,
+        email: newGerant.email,
+        phonenumber: newGerant.phonenumber,
+        password: data.password || 'Password123',
+        permissions: newGerant.permissions,
+      });
+      const persistedUser = { ...newGerant, id: response.gerant?.id || newGerant.id };
+      setAllUsers(prev => [persistedUser, ...prev]);
+      addActiviteGerant({
+        gerant_id: persistedUser.id,
+        gerant_nom: persistedUser.name,
+        bailleur_id: effectiveOwnerId,
+        action_type: 'connexion',
+        titre: 'Création du compte Gérant',
+        description: `Nouveau compte Gérant créé pour ${persistedUser.name} (${persistedUser.email}) avec permissions modulaires.`,
+        statut: 'succes'
+      });
+      return { success: true, user: persistedUser };
+    } catch (error: any) {
+      return { success: false, error: error?.message || 'Impossible de créer le compte du gérant.' };
+    }
   };
 
   const updateGerantAdjoint = (id: string, updates: Partial<UserAccount>) => {

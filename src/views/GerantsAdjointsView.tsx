@@ -139,29 +139,15 @@ export const GerantsAdjointsView: React.FC = () => {
       name: name.trim(),
       email: email.trim().toLowerCase(),
       phonenumber: phone.trim(),
-      password: password.trim() || 'password123',
+      password: password.trim() || 'Password123',
       permissions: createPermissions
     };
 
-    const res = createGerantAdjoint(payload);
+    const res = await createGerantAdjoint(payload);
 
     if (!res.success) {
       setFeedbackMsg({ type: 'error', text: res.error || 'Erreur lors de la création du compte.' });
       return;
-    }
-
-    // Backend sync
-    try {
-      await fetch('/api/gerants-adjoints', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...payload,
-          bailleur_id: effectiveOwnerId
-        })
-      });
-    } catch (err) {
-      console.warn('API sync error:', err);
     }
 
     setFeedbackMsg({ 

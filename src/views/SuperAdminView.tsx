@@ -141,6 +141,20 @@ export const SuperAdminView: React.FC = () => {
     return sum + (sub.montant_paye_fcfa || 0);
   }, 0);
 
+  const emptyPlan: SubscriptionPlan = {
+    id: 'unknown',
+    nom: 'Aucun forfait associé',
+    prix_fcfa: 0,
+    ca_min_fcfa: 0,
+    ca_max_fcfa: 0,
+    tranche_ca_label: '',
+    gratuit_3_premiers_mois: false,
+    max_logements: 0,
+    max_pieces: 0,
+    description: '',
+    features: [],
+  };
+
   // Filtered subscribers
   const filteredBailleurs = bailleursList.filter((user) => {
     const sub = subscriptions.find(s => s.user_id === user.id);
@@ -168,7 +182,7 @@ export const SuperAdminView: React.FC = () => {
     return matchesSearch && matchesPlan && matchesStatus;
   });
 
-  const handleAddSubscriberSubmit = (e: React.FormEvent) => {
+  const handleAddSubscriberSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddSubscriberError(null);
 
@@ -177,7 +191,7 @@ export const SuperAdminView: React.FC = () => {
       return;
     }
 
-    const res = addSubscriberByAdmin({
+    const res = await addSubscriberByAdmin({
       name: addSubscriberForm.name.trim(),
       email: addSubscriberForm.email.trim().toLowerCase(),
       phonenumber: addSubscriberForm.phonenumber.trim(),
@@ -199,7 +213,7 @@ export const SuperAdminView: React.FC = () => {
     setTimeout(() => setActionToast(null), 4000);
   };
 
-  const handleEditSubscriberSubmit = (e: React.FormEvent) => {
+  const handleEditSubscriberSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!subscriberToEdit) return;
     setEditSubscriberError(null);
@@ -209,7 +223,7 @@ export const SuperAdminView: React.FC = () => {
       return;
     }
 
-    const res = updateSubscriberByAdmin(subscriberToEdit.user.id, {
+    const res = await updateSubscriberByAdmin(subscriberToEdit.user.id, {
       name: editSubscriberForm.name.trim(),
       email: editSubscriberForm.email.trim().toLowerCase(),
       phonenumber: editSubscriberForm.phonenumber.trim(),
@@ -239,12 +253,12 @@ export const SuperAdminView: React.FC = () => {
     setTimeout(() => setActionToast(null), 4000);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!userToDelete) return;
     setIsDeleting(true);
 
-    setTimeout(() => {
-      const res = deleteUser(userToDelete.id);
+    setTimeout(async () => {
+      const res = await deleteUser(userToDelete.id);
       setIsDeleting(false);
       setUserToDelete(null);
 
@@ -519,7 +533,7 @@ export const SuperAdminView: React.FC = () => {
               <div className="divide-y divide-slate-200">
                 {filteredBailleurs.map((user) => {
                   const sub = subscriptions.find(s => s.user_id === user.id);
-                  const plan = subscriptionPlans.find(p => p.id === (sub?.plan_id || user.abonnement_id)) || subscriptionPlans[1];
+                  const plan = subscriptionPlans.find(p => p.id === (sub?.plan_id || user.abonnement_id)) || subscriptionPlans[1] || subscriptionPlans[0] || emptyPlan;
                   const userLogements = logements.filter(l => l.user_id === user.id);
                   const userPiecesCount = pieces.filter(p => userLogements.some(l => l.id === p.logement_id)).length;
                   const isExpired = sub?.statut === 'expire';
@@ -1346,7 +1360,7 @@ export const SuperAdminView: React.FC = () => {
             <tbody className="divide-y divide-slate-200">
               {allUsers.map((u) => {
                 const sub = subscriptions.find(s => s.user_id === u.id);
-                const plan = subscriptionPlans.find(p => p.id === (sub?.plan_id || u.abonnement_id));
+                const plan = subscriptionPlans.find(p => p.id === (sub?.plan_id || u.abonnement_id)) || emptyPlan;
                 const isSuperAdmin = u.role === 'superadmin';
 
                 return (

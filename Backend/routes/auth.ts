@@ -7,6 +7,10 @@ import { requireAuth, AuthRequest } from '../middleware/auth.ts';
 import { validateBody } from '../middleware/validate.ts';
 import { getOrCreateUser, getUserWithDetails, updateUserProfile } from '../db/users.ts';
 import { z } from 'zod';
+import { Resend } from 'resend';
+
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const resendFrom = process.env.RESEND_FROM_EMAIL || 'LocaManager <onboarding@resend.dev>';
 
 const passwordSchema = z.string().min(8).regex(/[A-Z]/).regex(/[0-9]/);
 const passwordChangeSchema = z.object({
@@ -140,8 +144,23 @@ router.post('/security/email', requireAuth, validateBody(emailChangeSchema), asy
     const token = randomBytes(32).toString('hex');
     const expires = new Date(Date.now() + 15 * 60_000);
     await prisma.user.update({ where: { uid }, data: { pendingEmail: newEmail, pendingEmailToken: token, pendingEmailExpiresAt: expires } });
+    if (!resend) {
+      await prisma.user.update({ where: { uid }, data: { pendingEmail: null, pendingEmailToken: null, pendingEmailExpiresAt: null } });
+      return res.status(503).json({ error: 'Le service d’envoi d’e-mails est momentanément indisponible.' });
+    }
+    const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || 'http://localhost:3000';
+    const confirmationUrl = `${frontendUrl.replace(/\/$/, '')}/confirm-email?token=${encodeURIComponent(token)}`;
+    const { error: emailError } = await resend.emails.send({
+      from: resendFrom,
+      to: [newEmail],
+      subject: 'Confirmez votre nouvelle adresse e-mail LocaManager',
+      html: `<div style="font-family:Arial,sans-serif;color:#1e293b;line-height:1.5"><h1 style="font-size:20px">Confirmez votre nouvelle adresse e-mail</h1><p>Une demande de changement d’adresse a été faite pour votre compte LocaManager.</p><p><a href="${confirmationUrl}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none">Confirmer cette adresse</a></p><p>Ce lien expire dans 15 minutes. Si vous n’êtes pas à l’origine de cette demande, ignorez cet e-mail.</p></div>`,
+    });
+    if (emailError) {
+      await prisma.user.update({ where: { uid }, data: { pendingEmail: null, pendingEmailToken: null, pendingEmailExpiresAt: null } });
+      throw emailError;
+    }
     await prisma.securityAuditLog.create({ data: { userId: req.dbUser?.id, action: 'EMAIL_CHANGE_REQUESTED', ipAddress: getIp(req) } });
-    console.info(`[security] Email confirmation token generated for ${uid}: ${token}`);
     return res.json({ success: true, message: 'Un lien de confirmation a été envoyé à la nouvelle adresse.' });
   } catch {
     return res.status(400).json({ error: 'Impossible de traiter cette demande.' });

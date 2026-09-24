@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import { auth } from '../auth.ts';
+import { auth, emailVerificationCallbackUrl } from '../auth.ts';
 import { prisma } from '../db/index.ts';
 import { getOrCreateUser } from '../db/users.ts';
 
@@ -28,7 +28,7 @@ router.post('/', async (req, res: Response) => {
 
   try {
     const authResult = await auth.api.signUpEmail({
-      body: { name, email, password },
+      body: { name, email, password, callbackURL: emailVerificationCallbackUrl },
     });
     if (!authResult.user) {
       return res.status(400).json({ error: 'Impossible de créer le compte d’authentification.' });

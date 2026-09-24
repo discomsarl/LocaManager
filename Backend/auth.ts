@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer } from 'better-auth/plugins';
@@ -6,6 +7,18 @@ import { prisma } from './db/index.ts';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const resendFrom = process.env.RESEND_FROM_EMAIL || 'LocaManager <onboarding@resend.dev>';
+export const emailVerificationCallbackUrl = `${(process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '')}/verify-email`;
+
+function getFrontendVerificationUrl(url: string) {
+  try {
+    const verificationUrl = new URL(url);
+    const token = verificationUrl.searchParams.get('token');
+    if (!token) return url;
+    return `${emailVerificationCallbackUrl}?token=${encodeURIComponent(token)}`;
+  } catch {
+    return url;
+  }
+}
 
 export async function sendPasswordChangeNotification(to: string) {
   if (!resend) {
@@ -96,7 +109,7 @@ export const auth = betterAuth({
             <h1 style="font-size:20px">Confirmez votre adresse e-mail</h1>
             <p>Bonjour ${user.name},</p>
             <p>Confirmez votre adresse pour activer votre compte LocaManager.</p>
-            <p><a href="${url}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none">Confirmer mon adresse</a></p>
+            <p><a href="${getFrontendVerificationUrl(url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none">Confirmer mon adresse</a></p>
             <p>Ce lien est valable 24 heures.</p>
           </div>`,
       });
