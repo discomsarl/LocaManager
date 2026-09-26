@@ -7,6 +7,7 @@
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "tsx server.ts",
     "dev:client": "vite",
+    "build:vercel": "vite build",
     "build": "npx prisma generate --schema=Backend/prisma/schema.prisma && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist",

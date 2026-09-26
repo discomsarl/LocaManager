@@ -12,6 +12,8 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
+      - key: BETTER_AUTH_URL
+        sync: false
       - key: BETTER_AUTH_SECRET
         sync: false
       - key: BETTER_AUTH_URL
@@ -24,5 +26,9 @@ services:
         sync: false
       - key: RESEND_FROM_EMAIL
         sync: false
+      - key: TRUSTED_ORIGINS
+        sync: false
       - key: SUPERADMIN_EMAIL
+        sync: false
+      - key: SUPERADMIN_BOOTSTRAP_KEY
         sync: false

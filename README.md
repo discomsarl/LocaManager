@@ -38,3 +38,13 @@ Si la base ne contient aucun utilisateur `SUPER_ADMIN`, ouvrez `/superadmin-setu
 ### Production
 
 Utilisez une valeur longue et aléatoire pour `BETTER_AUTH_SECRET`, et définissez `BETTER_AUTH_URL` sur l'URL publique de l'API. Les cookies de session sont envoyés avec les requêtes API; aucun secret d'authentification ne doit être exposé au navigateur.
+
+### Déploiement Vercel et Render
+
+Le frontend est servi comme site statique sur Vercel. L'API Express et PostgreSQL doivent être hébergés séparément : `render.yaml` configure le service API sur Render. Vercel ne démarre pas le serveur Express.
+
+1. Importez d'abord le dépôt dans Render en utilisant le Blueprint `render.yaml`. Renseignez `DATABASE_URL` avec une base PostgreSQL accessible depuis Render, puis fournissez les secrets proposés dans le Blueprint. Après création de la base, exécutez une fois `npx prisma db push --schema=Backend/prisma/schema.prisma` avec cette URL pour créer les tables. `BETTER_AUTH_URL` doit être l'URL publique du service Render. `FRONTEND_URL` et `TRUSTED_ORIGINS` doivent contenir l'origine Vercel exacte, par exemple `https://mon-app.vercel.app` (sans chemin; origines multiples séparées par des virgules pour `TRUSTED_ORIGINS`).
+2. Importez le même dépôt dans Vercel. La configuration du dépôt lance `npm ci` puis `npm run build:vercel` et publie `dist`. Dans les variables d'environnement Vercel, ajoutez `VITE_API_URL` avec l'URL publique Render, sans `/` final, par exemple `https://locamanager-api.onrender.com`. Cette valeur est intégrée au frontend pendant la build : relancez un déploiement après toute modification.
+3. Si Google OAuth est utilisé, configurez `GOOGLE_CLIENT_ID` et `GOOGLE_CLIENT_SECRET` sur Render, `VITE_GOOGLE_AUTH_ENABLED=true` sur Vercel, et déclarez l'URL de rappel Better Auth auprès de Google : `https://<api-render>/api/auth/callback/google`.
+
+Variables serveur sensibles (`DATABASE_URL`, `BETTER_AUTH_SECRET`, clés Google, Resend et `SUPERADMIN_BOOTSTRAP_KEY`) à saisir dans Render uniquement. Ne préfixez jamais ces secrets par `VITE_`. Après déploiement, vérifiez `https://<api-render>/api/health` puis l'application Vercel.
