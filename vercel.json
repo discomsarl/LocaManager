@@ -5,6 +5,7 @@
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": {
+        "buildCommand": "npm run build:vercel",
         "distDir": "dist"
       }
     },
@@ -17,6 +18,9 @@
     {
       "src": "/api/(.*)",
       "dest": "Backend/server.ts"
+    },
+    {
+      "handle": "filesystem"
     },
     {
       "src": "/(.*)",
