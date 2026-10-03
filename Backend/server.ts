@@ -18,11 +18,12 @@ import superadminSetupRouter from './routes/superadminSetup.ts';
 import { requireAuth } from './middleware/auth.ts';
 import { validateBody } from './middleware/validate.ts';
 
-export async function startBackendServer() {
+export function createApp() {
   const app = express();
-  const PORT = Number(process.env.PORT || 3001);
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-  const allowedOrigins = new Set([frontendUrl, 'http://localhost:3000']);
+  const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || '';
+  const allowedOrigins = new Set(
+    [frontendUrl, process.env.APP_URL, process.env.TRUSTED_ORIGINS?.split(',').filter(Boolean)].flat().filter(Boolean)
+  );
 
   // CORS Middleware
   app.use((req, res, next) => {
@@ -87,26 +88,36 @@ export async function startBackendServer() {
   app.use('/api/subscription', subscriptionRouter);
   app.use('/api/verify-quittance', verifyQuittanceRouter);
 
-  // Vite middleware for development & static serving for production
+  return app;
+}
+
+const app = createApp();
+
+// Démarrage manuel uniquement hors Vercel (développement local ou serveur Node standalone)
+if (!process.env.VERCEL) {
+  const PORT = Number(process.env.PORT || 3001);
+  
   if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
+    createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
+    }).then((vite) => {
+      app.use(vite.middlewares);
+      app.listen(PORT, '0.0.0.0', () => {
+        console.log(`[DISCOM SaaS Backend Dev] Serveur démarré sur http://0.0.0.0:${PORT}`);
+      });
     });
-    app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    // Express 5 wildcard routing
     app.get('*all', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[DISCOM SaaS Backend Prod] Serveur démarré sur http://0.0.0.0:${PORT}`);
+    });
   }
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[DISCOM SaaS Backend] Serveur démarré sur http://0.0.0.0:${PORT}`);
-  });
 }
 
-// Auto-start when executed directly
-startBackendServer();
+// Requis par Vercel pour exécuter Express sous forme de Serverless Function
+export default app;
