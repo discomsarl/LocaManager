@@ -75,8 +75,8 @@ export const QuittanceModal: React.FC = () => {
   const transactionRef = selectedQuittancePaiement.reference_recu || `${modePaiementLabel}-${quittanceNum}`;
 
   // Public verification URL
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-  const verificationUrl = `${origin}/?verify=${encodeURIComponent(transactionRef)}`;
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const verificationUrl = origin ? `${origin}/?verify=${encodeURIComponent(transactionRef)}` : `/?verify=${encodeURIComponent(transactionRef)}`;
 
   // Automatically generate QR Code when receipt is opened
   useEffect(() => {

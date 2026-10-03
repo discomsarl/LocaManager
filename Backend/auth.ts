@@ -7,7 +7,8 @@ import { prisma } from './db/index.ts';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const resendFrom = process.env.RESEND_FROM_EMAIL || 'LocaManager <onboarding@resend.dev>';
-export const emailVerificationCallbackUrl = `${(process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '')}/verify-email`;
+const frontendBaseUrl = process.env.FRONTEND_URL || process.env.APP_URL || '';
+export const emailVerificationCallbackUrl = frontendBaseUrl ? `${frontendBaseUrl.replace(/\/$/, '')}/verify-email` : '/verify-email';
 
 function getFrontendVerificationUrl(url: string) {
   try {
@@ -128,13 +129,8 @@ export const auth = betterAuth({
   ],
   trustedOrigins: [
     ...(process.env.TRUSTED_ORIGINS ? process.env.TRUSTED_ORIGINS.split(',') : []),
-    process.env.FRONTEND_URL || 'http://localhost:3000',
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:3001',
-    'http://192.168.1.164:3000',
-    'http://192.168.1.164:3001',
+    ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+    ...(process.env.APP_URL ? [process.env.APP_URL] : []),
   ],
   advanced: {
     database: {

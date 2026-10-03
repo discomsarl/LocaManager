@@ -270,8 +270,8 @@ export const downloadQuittancePDF = async ({
     const lookupCode = paiement.reference_recu || paiement.quittance_numero || String(paiement.id);
     let qrImage = qrDataUrl;
     if (!qrImage) {
-      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-      const targetUrl = verificationUrl || `${currentOrigin}/?verify=${encodeURIComponent(lookupCode)}`;
+      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+      const targetUrl = verificationUrl || (currentOrigin ? `${currentOrigin}/?verify=${encodeURIComponent(lookupCode)}` : `/?verify=${encodeURIComponent(lookupCode)}`);
       try {
         qrImage = await QRCode.toDataURL(targetUrl, {
           width: 200,

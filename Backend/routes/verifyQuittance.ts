@@ -215,9 +215,9 @@ router.get('/:code/qr', async (req: Request, res: Response) => {
     }
 
     // Construction de l'URL publique de vérification
-    const host = req.get('host') || 'localhost:3000';
+    const host = req.get('host') || process.env.FRONTEND_URL || process.env.APP_URL || '';
     const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
-    const verifyUrl = `${protocol}://${host}/?verify=${encodeURIComponent(rawCode)}`;
+    const verifyUrl = host ? `${protocol}://${host.replace(/^https?:\/\//, '')}/?verify=${encodeURIComponent(rawCode)}` : `/?verify=${encodeURIComponent(rawCode)}`;
 
     const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
       width: 256,
