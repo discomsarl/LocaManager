@@ -306,7 +306,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     const saved = getStorageItem('locamanager_is_authenticated');
-    return saved === 'true';
+    return import.meta.env.DEV && saved === 'true';
   });
   const [isAuthSessionChecked, setIsAuthSessionChecked] = useState(false);
 
