@@ -3,7 +3,7 @@ import 'dotenv/config';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { toNodeHandler } from 'better-auth/node';
-import { auth } from './auth.ts';
+import { auth } from './auth';
 
 // Routes
 import authRouter, { handleSyncUser, handleGetCurrentUser, handleUpdateProfile, profileUpdateSchema } from './routes/auth.ts';
